@@ -8,10 +8,6 @@ import CarAutocomplete from "../../../components/CarAutocomplete";
 import { checkYearOutOfRange } from "../../../lib/yearValidation";
 import { getDefaultZone, setDefaultZone } from "../../../lib/zoneStorage";
 
-const CONDITIONS = ["ใหม่", "มือสอง-ดี", "มือสอง-ซ่อม"];
-const SOURCE_TYPES = ["รถชน", "ประกัน total loss", "น้ำท่วม"];
-const STATUSES = ["available", "reserved", "sold"];
-
 export default function EditPartPage() {
   const params = useParams();
   const router = useRouter();
@@ -26,13 +22,20 @@ export default function EditPartPage() {
   const [deleting, setDeleting] = useState(false);
   const [msg, setMsg] = useState(null);
   const [yearHint, setYearHint] = useState(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const [zones, setZones] = useState([]);
   const [zonesLoading, setZonesLoading] = useState(true);
 
+  const [conditions, setConditions] = useState([]);
+  const [sourceTypes, setSourceTypes] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+
   useEffect(() => {
     fetchPart();
     fetchZones();
+    fetchOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -44,6 +47,21 @@ export default function EditPartPage() {
       .order("code", { ascending: true });
     if (!error) setZones(data || []);
     setZonesLoading(false);
+  }
+
+  async function fetchOptions() {
+    setOptionsLoading(true);
+    const { data, error } = await supabase
+      .from("options")
+      .select("*")
+      .order("sort_order", { ascending: true });
+
+    if (!error && data) {
+      setConditions(data.filter((o) => o.category === "condition").map((o) => o.value));
+      setSourceTypes(data.filter((o) => o.category === "source_type").map((o) => o.value));
+      setStatuses(data.filter((o) => o.category === "status").map((o) => o.value));
+    }
+    setOptionsLoading(false);
   }
 
   async function fetchPart() {
@@ -129,10 +147,10 @@ export default function EditPartPage() {
           car_brand: form.car_brand || null,
           car_model: form.car_model || null,
           car_year: form.car_year ? Number(form.car_year) : null,
-          condition: form.condition,
+          condition: form.condition || null,
           zone_code: form.zone_code || null,
-          source_type: form.source_type,
-          status: form.status,
+          source_type: form.source_type || null,
+          status: form.status || null,
           price: form.price ? Number(form.price) : null,
           photo_url,
         })
@@ -235,12 +253,53 @@ export default function EditPartPage() {
         </label>
 
         {preview && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={preview}
-            alt="preview"
-            style={{ width: 140, height: 140, objectFit: "cover", borderRadius: 8 }}
-          />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={preview}
+              alt="preview"
+              onClick={() => setLightboxOpen(true)}
+              style={{
+                width: 140,
+                height: 140,
+                objectFit: "cover",
+                borderRadius: 8,
+                cursor: "zoom-in",
+              }}
+            />
+            <span style={{ fontSize: 12, color: "#6b7280", marginTop: -8 }}>
+              คลิกรูปเพื่อดูขนาดใหญ่
+            </span>
+          </>
+        )}
+
+        {lightboxOpen && (
+          <div
+            onClick={() => setLightboxOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.9)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 100,
+              cursor: "zoom-out",
+              padding: 20,
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={preview}
+              alt="ขยายรูป"
+              style={{
+                maxWidth: "100%",
+                maxHeight: "100%",
+                borderRadius: 8,
+                objectFit: "contain",
+              }}
+            />
+          </div>
         )}
 
         <label>
@@ -314,34 +373,54 @@ export default function EditPartPage() {
 
         <label>
           สภาพ
-          <select name="condition" value={form.condition || CONDITIONS[0]} onChange={handleChange}>
-            {CONDITIONS.map((c) => (
+          <select name="condition" value={form.condition || ""} onChange={handleChange}>
+            <option value="">— เลือก —</option>
+            {conditions.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
+            {form.condition && !conditions.includes(form.condition) && (
+              <option value={form.condition}>{form.condition} (ไม่อยู่ในลิสต์แล้ว)</option>
+            )}
           </select>
+          {!optionsLoading && conditions.length === 0 && (
+            <span style={{ fontSize: 12, color: "#6b7280" }}>
+              ยังไม่มีตัวเลือก —{" "}
+              <Link href="/admin/options" style={{ color: "#93c5fd" }}>
+                เพิ่มที่หน้าตั้งค่า
+              </Link>
+            </span>
+          )}
         </label>
 
         <label>
           ที่มา
-          <select name="source_type" value={form.source_type || SOURCE_TYPES[0]} onChange={handleChange}>
-            {SOURCE_TYPES.map((s) => (
+          <select name="source_type" value={form.source_type || ""} onChange={handleChange}>
+            <option value="">— เลือก —</option>
+            {sourceTypes.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
+            {form.source_type && !sourceTypes.includes(form.source_type) && (
+              <option value={form.source_type}>{form.source_type} (ไม่อยู่ในลิสต์แล้ว)</option>
+            )}
           </select>
         </label>
 
         <label>
           สถานะ
-          <select name="status" value={form.status || "available"} onChange={handleChange}>
-            {STATUSES.map((s) => (
+          <select name="status" value={form.status || ""} onChange={handleChange}>
+            <option value="">— เลือก —</option>
+            {statuses.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
+            {form.status && !statuses.includes(form.status) && (
+              <option value={form.status}>{form.status} (ไม่อยู่ในลิสต์แล้ว)</option>
+            )}
           </select>
         </label>
 

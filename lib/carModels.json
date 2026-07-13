@@ -449,6 +449,13 @@
   },
   {
     "brand": "Honda",
+    "model": "Elysion",
+    "vehicle_type": "MPV (นำเข้าอิสระ)",
+    "year_start": "2004",
+    "year_end": "2013"
+  },
+  {
+    "brand": "Honda",
     "model": "Freed",
     "vehicle_type": "MPV",
     "year_start": "2009",
@@ -467,6 +474,13 @@
     "vehicle_type": "ครอสโอเวอร์",
     "year_start": "2015",
     "year_end": "ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "Insight",
+    "vehicle_type": "ไฮบริด (นำเข้าอิสระ/จำนวนน้อย)",
+    "year_start": "2000",
+    "year_end": "2014"
   },
   {
     "brand": "Honda",
@@ -509,6 +523,13 @@
     "vehicle_type": "สปอร์ต โรดสเตอร์",
     "year_start": "1999",
     "year_end": "2009"
+  },
+  {
+    "brand": "Honda",
+    "model": "Stepwgn / Step WGN",
+    "vehicle_type": "MPV (นำเข้าอิสระ)",
+    "year_start": "1996",
+    "year_end": "ปัจจุบัน"
   },
   {
     "brand": "Honda",
@@ -1114,6 +1135,13 @@
   },
   {
     "brand": "Mitsubishi",
+    "model": "Delica D:5",
+    "vehicle_type": "MPV (นำเข้าอิสระ)",
+    "year_start": "2007",
+    "year_end": "ปัจจุบัน"
+  },
+  {
+    "brand": "Mitsubishi",
     "model": "Galant",
     "vehicle_type": "เก๋ง",
     "year_start": "1996",
@@ -1247,6 +1275,20 @@
   },
   {
     "brand": "Nissan",
+    "model": "Elgrand",
+    "vehicle_type": "MPV (นำเข้าอิสระ/เกรย์มาร์เก็ต)",
+    "year_start": "1997",
+    "year_end": "ปัจจุบัน"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Fuga",
+    "vehicle_type": "เก๋งหรู (นำเข้าอิสระ)",
+    "year_start": "2004",
+    "year_end": "2019"
+  },
+  {
+    "brand": "Nissan",
     "model": "GT-R",
     "vehicle_type": "สปอร์ต",
     "year_start": "2010",
@@ -1321,6 +1363,13 @@
     "vehicle_type": "MPV",
     "year_start": "2013",
     "year_end": "ปัจจุบัน"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Skyline / GT-R (เจนเนอเรชันเก่า JDM)",
+    "vehicle_type": "สปอร์ต (นำเข้าอิสระ)",
+    "year_start": "1996",
+    "year_end": "2007"
   },
   {
     "brand": "Nissan",
@@ -1709,6 +1758,13 @@
   },
   {
     "brand": "Toyota",
+    "model": "Century",
+    "vehicle_type": "เก๋งหรูระดับสูงสุด (นำเข้าอิสระ)",
+    "year_start": "1996",
+    "year_end": "ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
     "model": "Commuter / HiAce",
     "vehicle_type": "แวนเชิงพาณิชย์",
     "year_start": "1992",
@@ -1751,6 +1807,13 @@
   },
   {
     "brand": "Toyota",
+    "model": "Estima",
+    "vehicle_type": "MPV (นำเข้าอิสระ/เกรย์มาร์เก็ต)",
+    "year_start": "2000",
+    "year_end": "2016"
+  },
+  {
+    "brand": "Toyota",
     "model": "Fortuner",
     "vehicle_type": "SUV/PPV",
     "year_start": "2005",
@@ -1782,6 +1845,20 @@
     "model": "GR86",
     "vehicle_type": "สปอร์ต",
     "year_start": "2022",
+    "year_end": "ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Harrier",
+    "vehicle_type": "SUV (นำเข้าอิสระ)",
+    "year_start": "2000",
+    "year_end": "2020"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Harrier",
+    "vehicle_type": "SUV",
+    "year_start": "2021",
     "year_end": "ปัจจุบัน"
   },
   {
@@ -1849,6 +1926,13 @@
   },
   {
     "brand": "Toyota",
+    "model": "Isis",
+    "vehicle_type": "MPV (นำเข้าอิสระ)",
+    "year_start": "2004",
+    "year_end": "2017"
+  },
+  {
+    "brand": "Toyota",
     "model": "Land Cruiser",
     "vehicle_type": "SUV",
     "year_start": "1996",
@@ -1873,6 +1957,20 @@
     "model": "Majesty",
     "vehicle_type": "แวนหรู",
     "year_start": "2019",
+    "year_end": "ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Mark X",
+    "vehicle_type": "เก๋ง (นำเข้าอิสระ)",
+    "year_start": "2004",
+    "year_end": "2019"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Noah / Voxy",
+    "vehicle_type": "MPV (นำเข้าอิสระ)",
+    "year_start": "2001",
     "year_end": "ปัจจุบัน"
   },
   {

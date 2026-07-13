@@ -71,7 +71,7 @@ export default function ZonesAdminPage() {
     <div className="container">
       <div className="header">
         <h1>⚙️ จัดการโซนจัดเก็บ</h1>
-        <Link href="/" className="nav-link secondary">
+        <Link href="/admin" className="nav-link secondary">
           ← กลับ
         </Link>
       </div>

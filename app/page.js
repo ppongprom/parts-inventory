@@ -12,11 +12,21 @@ export default function HomePage() {
   const [search, setSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
   const [zoneFilter, setZoneFilter] = useState("");
+  const [zones, setZones] = useState([]);
 
   useEffect(() => {
     fetchParts();
+    fetchZones();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function fetchZones() {
+    const { data, error } = await supabase
+      .from("zones")
+      .select("*")
+      .order("code", { ascending: true });
+    if (!error) setZones(data || []);
+  }
 
   async function fetchParts() {
     setLoading(true);
@@ -42,8 +52,7 @@ export default function HomePage() {
     const matchBrand =
       !brandFilter ||
       p.car_brand?.toLowerCase() === brandFilter.toLowerCase();
-    const matchZone =
-      !zoneFilter || p.zone_code?.toLowerCase().includes(zoneFilter.toLowerCase());
+    const matchZone = !zoneFilter || p.zone_code === zoneFilter;
     return matchSearch && matchBrand && matchZone;
   });
 
@@ -54,8 +63,8 @@ export default function HomePage() {
       <div className="header">
         <h1>📦 สต็อกอะไหล่</h1>
         <div style={{ display: "flex", gap: 8 }}>
-          <Link href="/admin/zones" className="nav-link secondary">
-            ⚙️ โซน
+          <Link href="/admin" className="nav-link secondary">
+            ⚙️ ตั้งค่า
           </Link>
           <Link href="/add" className="nav-link">
             + เพิ่มอะไหล่
@@ -78,12 +87,15 @@ export default function HomePage() {
             </option>
           ))}
         </select>
-        <input
-          type="text"
-          placeholder="โซน เช่น JP-A1"
-          value={zoneFilter}
-          onChange={(e) => setZoneFilter(e.target.value)}
-        />
+        <select value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value)}>
+          <option value="">ทุกโซน</option>
+          {zones.map((z) => (
+            <option key={z.id} value={z.code}>
+              {z.code}
+              {z.name ? ` — ${z.name}` : ""}
+            </option>
+          ))}
+        </select>
       </div>
 
       {errorMsg && <div className="msg error">{errorMsg}</div>}

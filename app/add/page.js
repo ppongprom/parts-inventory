@@ -8,9 +8,6 @@ import CarAutocomplete from "../../components/CarAutocomplete";
 import { checkYearOutOfRange } from "../../lib/yearValidation";
 import { getDefaultZone, setDefaultZone } from "../../lib/zoneStorage";
 
-const CONDITIONS = ["ใหม่", "มือสอง-ดี", "มือสอง-ซ่อม"];
-const SOURCE_TYPES = ["รถชน", "ประกัน total loss", "น้ำท่วม"];
-
 export default function AddPartPage() {
   const router = useRouter();
   const fileInputRef = useRef(null);
@@ -20,9 +17,9 @@ export default function AddPartPage() {
     car_brand: "",
     car_model: "",
     car_year: "",
-    condition: CONDITIONS[0],
+    condition: "",
     zone_code: "",
-    source_type: SOURCE_TYPES[0],
+    source_type: "",
     price: "",
   });
   const [yearHint, setYearHint] = useState(null); // { start, end }
@@ -34,6 +31,10 @@ export default function AddPartPage() {
   const [zones, setZones] = useState([]);
   const [zonesLoading, setZonesLoading] = useState(true);
 
+  const [conditions, setConditions] = useState([]);
+  const [sourceTypes, setSourceTypes] = useState([]);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+
   useEffect(() => {
     // ตั้งค่าโซน default จากที่เลือกล่าสุด
     const lastZone = getDefaultZone();
@@ -41,6 +42,7 @@ export default function AddPartPage() {
       setForm((f) => ({ ...f, zone_code: lastZone }));
     }
     fetchZones();
+    fetchOptions();
   }, []);
 
   async function fetchZones() {
@@ -51,6 +53,27 @@ export default function AddPartPage() {
       .order("code", { ascending: true });
     if (!error) setZones(data || []);
     setZonesLoading(false);
+  }
+
+  async function fetchOptions() {
+    setOptionsLoading(true);
+    const { data, error } = await supabase
+      .from("options")
+      .select("*")
+      .order("sort_order", { ascending: true });
+
+    if (!error && data) {
+      const cond = data.filter((o) => o.category === "condition").map((o) => o.value);
+      const src = data.filter((o) => o.category === "source_type").map((o) => o.value);
+      setConditions(cond);
+      setSourceTypes(src);
+      setForm((f) => ({
+        ...f,
+        condition: f.condition || cond[0] || "",
+        source_type: f.source_type || src[0] || "",
+      }));
+    }
+    setOptionsLoading(false);
   }
 
   function handleChange(e) {
@@ -114,9 +137,9 @@ export default function AddPartPage() {
         car_brand: form.car_brand || null,
         car_model: form.car_model || null,
         car_year: form.car_year ? Number(form.car_year) : null,
-        condition: form.condition,
+        condition: form.condition || null,
         zone_code: form.zone_code || null,
-        source_type: form.source_type,
+        source_type: form.source_type || null,
         price: form.price ? Number(form.price) : null,
         photo_url,
         status: "available",
@@ -132,9 +155,9 @@ export default function AddPartPage() {
         car_brand: "",
         car_model: "",
         car_year: "",
-        condition: CONDITIONS[0],
+        condition: conditions[0] || "",
         zone_code: keepZone, // โซนล่าสุดยังอยู่ ให้ใช้ต่อได้เลย
-        source_type: SOURCE_TYPES[0],
+        source_type: sourceTypes[0] || "",
         price: "",
       });
       setYearHint(null);
@@ -280,23 +303,39 @@ export default function AddPartPage() {
         <label>
           สภาพ
           <select name="condition" value={form.condition} onChange={handleChange}>
-            {CONDITIONS.map((c) => (
+            {conditions.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
           </select>
+          {!optionsLoading && conditions.length === 0 && (
+            <span style={{ fontSize: 12, color: "#6b7280" }}>
+              ยังไม่มีตัวเลือก —{" "}
+              <Link href="/admin/options" style={{ color: "#93c5fd" }}>
+                เพิ่มที่หน้าตั้งค่า
+              </Link>
+            </span>
+          )}
         </label>
 
         <label>
           ที่มา
           <select name="source_type" value={form.source_type} onChange={handleChange}>
-            {SOURCE_TYPES.map((s) => (
+            {sourceTypes.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
             ))}
           </select>
+          {!optionsLoading && sourceTypes.length === 0 && (
+            <span style={{ fontSize: 12, color: "#6b7280" }}>
+              ยังไม่มีตัวเลือก —{" "}
+              <Link href="/admin/options" style={{ color: "#93c5fd" }}>
+                เพิ่มที่หน้าตั้งค่า
+              </Link>
+            </span>
+          )}
         </label>
 
         <label>
