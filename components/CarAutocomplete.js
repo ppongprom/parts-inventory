@@ -28,11 +28,20 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
 
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("model_generations_display")
-        .select("*")
-        .or(`brand_name.ilike.%${q}%,model_name.ilike.%${q}%,generation_code.ilike.%${q}%`)
-        .limit(10);
+
+      const tokens = q.split(/\s+/).filter(Boolean);
+      let queryBuilder = supabase.from("model_generations_display").select("*");
+
+      // แต่ละคำต้อง match กับ brand/model/generation_code อย่างน้อย 1 column
+      // (การเรียก .or() หลายครั้งจะ AND กันเอง ทำให้ "byd atto" หาเจอได้
+      //  แม้ยี่ห้อกับรุ่นจะอยู่คนละ column กัน)
+      tokens.forEach((token) => {
+        queryBuilder = queryBuilder.or(
+          `brand_name.ilike.%${token}%,model_name.ilike.%${token}%,generation_code.ilike.%${token}%`
+        );
+      });
+
+      const { data, error } = await queryBuilder.limit(10);
 
       if (!error) setResults(data || []);
       setLoading(false);
