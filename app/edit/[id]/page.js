@@ -8,13 +8,16 @@ import CarAutocomplete from "../../../components/CarAutocomplete";
 import { getDefaultZone, setDefaultZone } from "../../../lib/zoneStorage";
 import { resizeImageFile } from "../../../lib/imageResize";
 import { uploadPartPhotos } from "../../../lib/storageHelpers";
+import { useAuth } from "../../../lib/AuthProvider";
+import RequireAuth from "../../../components/RequireAuth";
 
-export default function EditPartPage() {
+function EditPartPageContent() {
   const params = useParams();
   const router = useRouter();
   const { id } = params;
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
+  const { currentShopId, currentRole } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(null);
@@ -26,7 +29,7 @@ export default function EditPartPage() {
   const [newPhotos, setNewPhotos] = useState([]);
   const [processingPhoto, setProcessingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState("");
-  const [lightboxUrl, setLightboxUrl] = useState(null);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
 
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -41,17 +44,19 @@ export default function EditPartPage() {
   const [optionsLoading, setOptionsLoading] = useState(true);
 
   useEffect(() => {
+    if (!currentShopId) return;
     fetchPart();
     fetchZones();
     fetchOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, currentShopId]);
 
   async function fetchZones() {
     setZonesLoading(true);
     const { data, error } = await supabase
       .from("zones")
       .select("*")
+      .eq("shop_id", currentShopId)
       .order("code", { ascending: true });
     if (!error) setZones(data || []);
     setZonesLoading(false);
@@ -62,6 +67,7 @@ export default function EditPartPage() {
     const { data, error } = await supabase
       .from("options")
       .select("*")
+      .eq("shop_id", currentShopId)
       .order("sort_order", { ascending: true });
 
     if (!error && data) {
@@ -143,6 +149,25 @@ export default function EditPartPage() {
   }
 
   const totalPhotoCount = existingPhotos.length + newPhotos.length;
+  const allPhotoUrls = [...existingPhotos, ...newPhotos.map((p) => p.previewUrl)];
+
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+
+    function handleKeyDown(e) {
+      if (e.key === "ArrowLeft") {
+        setLightboxIndex((i) => (i - 1 + allPhotoUrls.length) % allPhotoUrls.length);
+      } else if (e.key === "ArrowRight") {
+        setLightboxIndex((i) => (i + 1) % allPhotoUrls.length);
+      } else if (e.key === "Escape") {
+        setLightboxIndex(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lightboxIndex, allPhotoUrls.length]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -315,7 +340,7 @@ export default function EditPartPage() {
             {existingPhotos.map((url, i) => (
               <div className="photo-thumb" key={`existing-${i}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={`รูปเดิม ${i + 1}`} onClick={() => setLightboxUrl(url)} />
+                <img src={url} alt={`รูปเดิม ${i + 1}`} onClick={() => setLightboxIndex(i)} />
                 <button
                   type="button"
                   className="photo-remove-btn"
@@ -332,7 +357,7 @@ export default function EditPartPage() {
                 <img
                   src={p.previewUrl}
                   alt={`รูปใหม่ ${i + 1}`}
-                  onClick={() => setLightboxUrl(p.previewUrl)}
+                  onClick={() => setLightboxIndex(existingPhotos.length + i)}
                 />
                 <button
                   type="button"
@@ -349,9 +374,9 @@ export default function EditPartPage() {
 
         {photoError && <span style={{ fontSize: 12, color: "#fca5a5" }}>{photoError}</span>}
 
-        {lightboxUrl && (
+        {lightboxIndex !== null && (
           <div
-            onClick={() => setLightboxUrl(null)}
+            onClick={() => setLightboxIndex(null)}
             style={{
               position: "fixed",
               inset: 0,
@@ -364,12 +389,87 @@ export default function EditPartPage() {
               padding: 20,
             }}
           >
+            {allPhotoUrls.length > 1 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((i) => (i - 1 + allPhotoUrls.length) % allPhotoUrls.length);
+                }}
+                aria-label="รูปก่อนหน้า"
+                style={{
+                  position: "absolute",
+                  left: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: 44,
+                  height: 44,
+                  borderRadius: "50%",
+                  border: "none",
+                  background: "rgba(255,255,255,0.15)",
+                  color: "white",
+                  fontSize: 22,
+                  cursor: "pointer",
+                  zIndex: 101,
+                }}
+              >
+                ‹
+              </button>
+            )}
+
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={lightboxUrl}
+              src={allPhotoUrls[lightboxIndex]}
               alt="ขยายรูป"
+              onClick={(e) => e.stopPropagation()}
               style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8, objectFit: "contain" }}
             />
+
+            {allPhotoUrls.length > 1 && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((i) => (i + 1) % allPhotoUrls.length);
+                }}
+                aria-label="รูปถัดไป"
+                style={{
+                  position: "absolute",
+                  right: 12,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: 44,
+                  height: 44,
+                  borderRadius: "50%",
+                  border: "none",
+                  background: "rgba(255,255,255,0.15)",
+                  color: "white",
+                  fontSize: 22,
+                  cursor: "pointer",
+                  zIndex: 101,
+                }}
+              >
+                ›
+              </button>
+            )}
+
+            {allPhotoUrls.length > 1 && (
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 20,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  color: "white",
+                  fontSize: 13,
+                  background: "rgba(0,0,0,0.5)",
+                  padding: "4px 12px",
+                  borderRadius: 20,
+                }}
+              >
+                {lightboxIndex + 1} / {allPhotoUrls.length}
+              </div>
+            )}
           </div>
         )}
 
@@ -516,25 +616,35 @@ export default function EditPartPage() {
         </button>
       </form>
 
-      <button
-        type="button"
-        onClick={handleDeactivate}
-        disabled={saving || deleting}
-        style={{
-          marginTop: 12,
-          width: "100%",
-          padding: 14,
-          borderRadius: 8,
-          border: "1px solid #7f1d1d",
-          background: "transparent",
-          color: "#fca5a5",
-          fontSize: 15,
-          fontWeight: 600,
-          cursor: "pointer",
-        }}
-      >
-        {deleting ? "กำลังดำเนินการ..." : "🗑️ ลบอะไหล่นี้ (ซ่อนจากหน้าแรก)"}
-      </button>
+      {currentRole !== "assistant" && (
+        <button
+          type="button"
+          onClick={handleDeactivate}
+          disabled={saving || deleting}
+          style={{
+            marginTop: 12,
+            width: "100%",
+            padding: 14,
+            borderRadius: 8,
+            border: "1px solid #7f1d1d",
+            background: "transparent",
+            color: "#fca5a5",
+            fontSize: 15,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          {deleting ? "กำลังดำเนินการ..." : "🗑️ ลบอะไหล่นี้ (ซ่อนจากหน้าแรก)"}
+        </button>
+      )}
     </div>
+  );
+}
+
+export default function EditPartPage() {
+  return (
+    <RequireAuth allowedRoles={["owner", "manager", "supervisor", "technician", "assistant"]}>
+      <EditPartPageContent />
+    </RequireAuth>
   );
 }
