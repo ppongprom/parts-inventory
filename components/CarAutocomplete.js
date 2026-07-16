@@ -16,9 +16,16 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
   const [activeIndex, setActiveIndex] = useState(-1);
   const wrapperRef = useRef(null);
   const debounceRef = useRef(null);
+  const justSelectedRef = useRef(false); // กัน useEffect ค้นหาใหม่ทันทีหลังเพิ่งเลือกเสร็จ (setQuery ข้างล่างไปกระตุ้นมันโดยไม่ตั้งใจ)
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    // เพิ่งเลือกจาก dropdown มาเอง (ไม่ใช่ user พิมพ์เอง) ข้ามการค้นหารอบนี้ไปเลย
+    if (justSelectedRef.current) {
+      justSelectedRef.current = false;
+      return;
+    }
 
     const q = query.trim();
     if (q.length < 2) {
@@ -62,9 +69,11 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
 
   function handleSelect(item) {
     onSelect(item);
+    justSelectedRef.current = true;
     setQuery(`${item.brand_name} ${item.model_name}`);
     setOpen(false);
     setActiveIndex(-1);
+    setResults([]);
   }
 
   function handleKeyDown(e) {
