@@ -250,6 +250,7 @@ function EditPartPageContent() {
 
     if (totalPhotoCount === 0) {
       setPhotoError("ต้องมีรูปอย่างน้อย 1 รูปก่อนบันทึก");
+      alert("⚠️ กรุณาถ่าย/แนบรูปอย่างน้อย 1 รูปก่อนบันทึก");
       return;
     }
 
