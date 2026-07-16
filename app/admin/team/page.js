@@ -15,6 +15,7 @@ const ROLE_LABELS = {
 };
 
 const INVITABLE_ROLES = ["manager", "supervisor", "technician", "assistant"];
+const STAFF_ROLES = ["supervisor", "technician", "assistant"];
 
 function generateRandomPassword() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
@@ -23,6 +24,14 @@ function generateRandomPassword() {
     pass += chars[Math.floor(Math.random() * chars.length)];
   }
   return pass;
+}
+
+function generateRandomPin() {
+  let pin = "";
+  for (let i = 0; i < 6; i++) {
+    pin += Math.floor(Math.random() * 10);
+  }
+  return pin;
 }
 
 function TeamPageContent() {
@@ -43,6 +52,15 @@ function TeamPageContent() {
   const [directRole, setDirectRole] = useState("technician");
   const [creatingDirect, setCreatingDirect] = useState(false);
   const [createdCredential, setCreatedCredential] = useState(null);
+
+  // ฟอร์มสร้างบัญชีพนักงานแบบ username + PIN (ไม่ต้องใช้อีเมลเลย)
+  const [staffUsername, setStaffUsername] = useState("");
+  const [staffPin, setStaffPin] = useState(generateRandomPin());
+  const [staffRole, setStaffRole] = useState("technician");
+  const [staffContactName, setStaffContactName] = useState("");
+  const [staffContactPhone, setStaffContactPhone] = useState("");
+  const [creatingStaff, setCreatingStaff] = useState(false);
+  const [createdStaffCredential, setCreatedStaffCredential] = useState(null);
 
   useEffect(() => {
     if (currentShopId) fetchTeam();
@@ -132,6 +150,52 @@ function TeamPageContent() {
     }
   }
 
+  async function handleCreateStaff(e) {
+    e.preventDefault();
+    if (!staffUsername.trim() || !staffPin.trim() || !staffContactName.trim() || !staffContactPhone.trim()) return;
+
+    setCreatingStaff(true);
+    setMsg(null);
+    setCreatedStaffCredential(null);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const res = await fetch("/api/team/create-staff", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          shop_id: currentShopId,
+          role: staffRole,
+          username: staffUsername.trim(),
+          pin: staffPin,
+          contact_name: staffContactName.trim(),
+          contact_phone: staffContactPhone.trim(),
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "เกิดข้อผิดพลาด");
+
+      setCreatedStaffCredential({ username: staffUsername.trim(), pin: staffPin });
+      setMsg({ type: "success", text: "สร้างบัญชีพนักงานสำเร็จ ✅ — บอก username+PIN นี้ให้พนักงานไปเข้า /staff-login" });
+      setStaffUsername("");
+      setStaffPin(generateRandomPin());
+      setStaffContactName("");
+      setStaffContactPhone("");
+      fetchTeam();
+    } catch (err) {
+      setMsg({ type: "error", text: "สร้างบัญชีไม่สำเร็จ: " + err.message });
+    } finally {
+      setCreatingStaff(false);
+    }
+  }
+
   async function handleRoleChange(memberId, newRole) {
     setBusy(true);
     const { error } = await supabase.rpc("update_member_role", {
@@ -187,6 +251,117 @@ function TeamPageContent() {
 
       {canManage && (
         <>
+          {/* ================= สร้างบัญชีพนักงานแบบ username + PIN (แนะนำสำหรับหัวหน้างาน/ช่าง/ผู้ช่วยช่าง) ================= */}
+          <div
+            style={{
+              border: "1px solid var(--border-strong)",
+              borderRadius: 8,
+              padding: 16,
+              marginBottom: 20,
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>🔑 สร้างบัญชีพนักงาน (Username + PIN)</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
+              แนะนำสำหรับหัวหน้างาน/ช่าง/ผู้ช่วยช่าง — ไม่ต้องมีอีเมลเลย พนักงานเข้าผ่านหน้า{" "}
+              <code>/staff-login</code> ด้วย username + PIN เท่านั้น
+            </div>
+
+            <form onSubmit={handleCreateStaff}>
+              <label>
+                Username (ตัวพิมพ์เล็ก/ตัวเลข/จุด/ขีดล่าง 3-20 ตัว ไม่ซ้ำใครทั้งระบบ)
+                <input
+                  type="text"
+                  value={staffUsername}
+                  onChange={(e) => setStaffUsername(e.target.value)}
+                  placeholder="เช่น chang01"
+                  required
+                />
+              </label>
+              <label>
+                PIN (ตัวอักษร/ตัวเลข 4-20 ตัว)
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="text"
+                    value={staffPin}
+                    onChange={(e) => setStaffPin(e.target.value)}
+                    required
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setStaffPin(generateRandomPin())}
+                    style={{
+                      padding: "0 14px",
+                      borderRadius: 8,
+                      border: "1px solid var(--border-strong)",
+                      background: "var(--surface)",
+                      color: "var(--text)",
+                      fontSize: 13,
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    🎲 สุ่มใหม่
+                  </button>
+                </div>
+              </label>
+              <label>
+                ชื่อ-นามสกุล
+                <input
+                  type="text"
+                  value={staffContactName}
+                  onChange={(e) => setStaffContactName(e.target.value)}
+                  placeholder="เช่น สมชาย ใจดี"
+                  required
+                />
+              </label>
+              <label>
+                เบอร์โทร
+                <input
+                  type="tel"
+                  value={staffContactPhone}
+                  onChange={(e) => setStaffContactPhone(e.target.value)}
+                  placeholder="เช่น 081-234-5678"
+                  required
+                />
+              </label>
+              <label>
+                บทบาท
+                <select value={staffRole} onChange={(e) => setStaffRole(e.target.value)}>
+                  {STAFF_ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABELS[r]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="submit" disabled={creatingStaff}>
+                {creatingStaff ? "กำลังสร้าง..." : "+ สร้างบัญชีพนักงาน"}
+              </button>
+            </form>
+
+            {createdStaffCredential && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: 12,
+                  borderRadius: 8,
+                  background: "var(--surface-dim)",
+                  fontSize: 13,
+                }}
+              >
+                <div style={{ marginBottom: 4 }}>
+                  📋 ส่งข้อมูลนี้ให้พนักงาน (จะไม่แสดงซ้ำอีก จดไว้ก่อนปิดหน้านี้):
+                </div>
+                <div>Username: <strong>{createdStaffCredential.username}</strong></div>
+                <div>PIN: <strong>{createdStaffCredential.pin}</strong></div>
+                <div style={{ color: "var(--text-muted)", marginTop: 4 }}>
+                  ให้พนักงานเข้า <code>/staff-login</code> แล้วกรอก username+PIN นี้
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* ================= สร้างบัญชีทันที (ไม่ต้องผ่านอีเมลยืนยัน) ================= */}
           <div
             style={{
