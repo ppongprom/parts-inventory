@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 /**
- * ค้นหารถจาก brand + model + generation_code รวมกัน จากฐานข้อมูลจริง
- * (model_generations_display view) — พิมพ์ 2 ตัวอักษรก็ค้นได้
- * เมื่อเลือกแล้วจะ callback (item) พร้อม year_range_display ที่ห้าม user พิมพ์เอง
+ * ค้นหารถจาก brand + model + generation_code + trim (ถ้ามี) รวมกัน
+ * จากฐานข้อมูลจริง (car_search_display view) — พิมพ์ 2 ตัวอักษรก็ค้นได้
+ * ถ้ารุ่นนั้นมีรุ่นย่อยอยู่ในฐานข้อมูล จะโชว์เป็นตัวเลือกแยกให้เลือกตรงๆ ในช่องนี้เลย
+ * ไม่ต้องมี dropdown เลือกรุ่นย่อยแยกต่างหากอีกขั้น
+ * เมื่อเลือกแล้วจะ callback (item) พร้อม year_range_display/trim_id ที่ห้าม user พิมพ์เอง
  */
 export default function CarAutocomplete({ onSelect, placeholder }) {
   const [query, setQuery] = useState("");
@@ -16,16 +18,9 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
   const [activeIndex, setActiveIndex] = useState(-1);
   const wrapperRef = useRef(null);
   const debounceRef = useRef(null);
-  const justSelectedRef = useRef(false); // กัน useEffect ค้นหาใหม่ทันทีหลังเพิ่งเลือกเสร็จ (setQuery ข้างล่างไปกระตุ้นมันโดยไม่ตั้งใจ)
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    // เพิ่งเลือกจาก dropdown มาเอง (ไม่ใช่ user พิมพ์เอง) ข้ามการค้นหารอบนี้ไปเลย
-    if (justSelectedRef.current) {
-      justSelectedRef.current = false;
-      return;
-    }
 
     const q = query.trim();
     if (q.length < 2) {
@@ -37,18 +32,20 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
       setLoading(true);
 
       const tokens = q.split(/\s+/).filter(Boolean);
-      let queryBuilder = supabase.from("model_generations_display").select("*");
+      let queryBuilder = supabase.from("car_search_display").select("*");
 
-      // แต่ละคำต้อง match กับ brand/model/generation_code อย่างน้อย 1 column
+      // แต่ละคำต้อง match กับ brand/model/generation_code/trim_name อย่างน้อย 1 column
       // (การเรียก .or() หลายครั้งจะ AND กันเอง ทำให้ "byd atto" หาเจอได้
       //  แม้ยี่ห้อกับรุ่นจะอยู่คนละ column กัน)
       tokens.forEach((token) => {
         queryBuilder = queryBuilder.or(
-          `brand_name.ilike.%${token}%,model_name.ilike.%${token}%,generation_code.ilike.%${token}%`
+          `brand_name.ilike.%${token}%,model_name.ilike.%${token}%,generation_code.ilike.%${token}%,trim_name.ilike.%${token}%`
         );
       });
 
-      const { data, error } = await queryBuilder.limit(10);
+      const { data, error } = await queryBuilder
+        .order("trim_id", { ascending: true, nullsFirst: true })
+        .limit(15);
 
       if (!error) setResults(data || []);
       setLoading(false);
@@ -69,11 +66,11 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
 
   function handleSelect(item) {
     onSelect(item);
-    justSelectedRef.current = true;
-    setQuery(`${item.brand_name} ${item.model_name}`);
+    setQuery(
+      `${item.brand_name} ${item.model_name}${item.trim_name ? ` ${item.trim_name}` : ""}`
+    );
     setOpen(false);
     setActiveIndex(-1);
-    setResults([]);
   }
 
   function handleKeyDown(e) {
@@ -147,7 +144,7 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
         >
           {results.map((item, i) => (
             <div
-              key={item.generation_id}
+              key={`${item.generation_id}-${item.trim_id ?? "none"}`}
               onClick={() => handleSelect(item)}
               style={{
                 padding: "10px 12px",
@@ -159,10 +156,13 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
             >
               <div style={{ fontSize: 14, fontWeight: 600 }}>
                 {item.brand_name} {item.model_name}
-                {item.generation_code ? ` (${item.generation_code})` : ""}
+                {item.trim_name ? ` · ${item.trim_name}` : ""}
+                {item.powertrain_type ? ` [${item.powertrain_type}]` : ""}
               </div>
               <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                {item.generation_code ? `${item.generation_code} · ` : ""}
                 {item.vehicle_type} · {item.year_range_display}
+                {!item.trim_name ? " · ไม่ระบุรุ่นย่อย" : ""}
               </div>
             </div>
           ))}
@@ -185,7 +185,7 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
             zIndex: 20,
           }}
         >
-          ไม่พบในฐานข้อมูล — พิมพ์ยี่ห้อ/รุ่นในช่องด้านล่างเองได้ (จะไม่มีข้อมูลปีให้)
+          ไม่พบในฐานข้อมูล — แจ้งแอดมินให้เพิ่มยี่ห้อ/รุ่นนี้ในฐานข้อมูลก่อน เพื่อกันข้อมูลปี/รุ่นเพี้ยน
         </div>
       )}
     </div>

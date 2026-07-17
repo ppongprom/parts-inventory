@@ -7,7 +7,6 @@ import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthProvider";
 import RequireAuth from "../../../components/RequireAuth";
 import CarAutocomplete from "../../../components/CarAutocomplete";
-import TrimSelect from "../../../components/TrimSelect";
 import CarDamageDiagram from "../../../components/CarDamageDiagram";
 import { resizeImageFile } from "../../../lib/imageResize";
 import { uploadJobPhotos } from "../../../lib/storageHelpers";
@@ -341,15 +340,6 @@ function NewJobPageContent() {
             }}
           />
         </label>
-
-        <TrimSelect
-          generationId={selectedGeneration?.generation_id}
-          onChange={(trim) =>
-            setSelectedGeneration((g) =>
-              g ? { ...g, trim_id: trim?.trim_id || null, trim_name: trim?.trim_name || null } : g
-            )
-          }
-        />
 
         <label>
           ที่มา

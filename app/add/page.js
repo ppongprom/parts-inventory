@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabaseClient";
 import CarAutocomplete from "../../components/CarAutocomplete";
-import TrimSelect from "../../components/TrimSelect";
 import { getDefaultZone, setDefaultZone } from "../../lib/zoneStorage";
 import { resizeImageFile } from "../../lib/imageResize";
 import { uploadPartPhotos } from "../../lib/storageHelpers";
@@ -426,15 +425,6 @@ function AddPartPageContent() {
             เพื่อกันข้อมูลปี/รุ่นเพี้ยน
           </div>
         </label>
-
-        <TrimSelect
-          generationId={selectedGeneration?.generation_id}
-          onChange={(trim) =>
-            setSelectedGeneration((g) =>
-              g ? { ...g, trim_id: trim?.trim_id || null, trim_name: trim?.trim_name || null } : g
-            )
-          }
-        />
 
         <label>
           ปีที่ผลิต (ดึงจากฐานข้อมูลอัตโนมัติ — แก้เองไม่ได้)

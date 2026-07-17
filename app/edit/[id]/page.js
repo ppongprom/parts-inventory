@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import CarAutocomplete from "../../../components/CarAutocomplete";
-import TrimSelect from "../../../components/TrimSelect";
 import { getDefaultZone, setDefaultZone } from "../../../lib/zoneStorage";
 import { resizeImageFile } from "../../../lib/imageResize";
 import { uploadPartPhotos } from "../../../lib/storageHelpers";
@@ -175,12 +174,21 @@ function EditPartPageContent() {
         : [];
       setExistingPhotos(photos);
       if (data.car_year_display) {
+        let trimName = null;
+        if (data.trim_id) {
+          const { data: trimRow } = await supabase
+            .from("model_trims")
+            .select("trim_name")
+            .eq("trim_id", data.trim_id)
+            .maybeSingle();
+          trimName = trimRow?.trim_name || null;
+        }
         setSelectedGeneration({
           generation_id: data.generation_id,
           year_range_display: data.car_year_display,
           generation_code: null,
           trim_id: data.trim_id || null,
-          trim_name: null,
+          trim_name: trimName,
         });
       }
     }
@@ -577,7 +585,9 @@ function EditPartPageContent() {
             }}
           >
             {form.car_brand || form.car_model
-              ? `${form.car_brand || ""} ${form.car_model || ""}`.trim()
+              ? `${form.car_brand || ""} ${form.car_model || ""}${
+                  selectedGeneration?.trim_name ? ` · ${selectedGeneration.trim_name}` : ""
+                }`.trim()
               : "— ยังไม่มีข้อมูลรถ —"}
           </div>
         </label>
@@ -595,16 +605,6 @@ function EditPartPageContent() {
             }}
           />
         </label>
-
-        <TrimSelect
-          generationId={selectedGeneration?.generation_id}
-          initialTrimId={form.trim_id}
-          onChange={(trim) =>
-            setSelectedGeneration((g) =>
-              g ? { ...g, trim_id: trim?.trim_id || null, trim_name: trim?.trim_name || null } : g
-            )
-          }
-        />
 
         <label>
           ปีที่ผลิต (ดึงจากฐานข้อมูลอัตโนมัติ — แก้เองไม่ได้)
