@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabaseClient";
-import CarCascadeSelect from "../../components/CarCascadeSelect";
+import CarAutocomplete from "../../components/CarAutocomplete";
+import TrimSelect from "../../components/TrimSelect";
 import { getDefaultZone, setDefaultZone } from "../../lib/zoneStorage";
 import { resizeImageFile } from "../../lib/imageResize";
 import { uploadPartPhotos } from "../../lib/storageHelpers";
@@ -150,7 +151,6 @@ function AddPartPageContent() {
 
     if (photos.length === 0) {
       setPhotoError("ต้องมีรูปอย่างน้อย 1 รูปก่อนบันทึก");
-      alert("⚠️ กรุณาถ่าย/แนบรูปอย่างน้อย 1 รูปก่อนบันทึก");
       return;
     }
 
@@ -410,8 +410,8 @@ function AddPartPageContent() {
         </label>
 
         <label>
-          🔍 เลือกรถ (ยี่ห้อ → รุ่น → ปี → รุ่นย่อยถ้ามี)
-          <CarCascadeSelect
+          🔍 ค้นหารถ (ยี่ห้อ/รุ่น)
+          <CarAutocomplete
             onSelect={(item) => {
               setForm((f) => ({
                 ...f,
@@ -422,10 +422,19 @@ function AddPartPageContent() {
             }}
           />
           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-            เลือกจากฐานข้อมูลเท่านั้น — ถ้าไม่เจอรุ่นที่ต้องการ แจ้งแอดมินให้เพิ่มในฐานข้อมูลก่อน
+            เลือกจากรายการที่ค้นเจอเท่านั้น — ถ้าไม่เจอรุ่นที่ต้องการ แจ้งแอดมินให้เพิ่มในฐานข้อมูลก่อน
             เพื่อกันข้อมูลปี/รุ่นเพี้ยน
           </div>
         </label>
+
+        <TrimSelect
+          generationId={selectedGeneration?.generation_id}
+          onChange={(trim) =>
+            setSelectedGeneration((g) =>
+              g ? { ...g, trim_id: trim?.trim_id || null, trim_name: trim?.trim_name || null } : g
+            )
+          }
+        />
 
         <label>
           ปีที่ผลิต (ดึงจากฐานข้อมูลอัตโนมัติ — แก้เองไม่ได้)
@@ -445,7 +454,7 @@ function AddPartPageContent() {
                     ? ` (${selectedGeneration.generation_code})`
                     : ""
                 }${selectedGeneration.trim_name ? ` · รุ่นย่อย: ${selectedGeneration.trim_name}` : ""}`
-              : "— เลือกยี่ห้อ/รุ่น/ปีด้านบนก่อน จะขึ้นปีให้อัตโนมัติ —"}
+              : "— เลือกรถจากช่องค้นหาด้านบนก่อน จะขึ้นปีให้อัตโนมัติ —"}
           </div>
         </label>
 

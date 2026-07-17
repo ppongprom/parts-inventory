@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
-import CarCascadeSelect from "../../../components/CarCascadeSelect";
+import CarAutocomplete from "../../../components/CarAutocomplete";
+import TrimSelect from "../../../components/TrimSelect";
 import { getDefaultZone, setDefaultZone } from "../../../lib/zoneStorage";
 import { resizeImageFile } from "../../../lib/imageResize";
 import { uploadPartPhotos } from "../../../lib/storageHelpers";
@@ -173,6 +174,15 @@ function EditPartPageContent() {
         ? [data.photo_url]
         : [];
       setExistingPhotos(photos);
+      if (data.car_year_display) {
+        setSelectedGeneration({
+          generation_id: data.generation_id,
+          year_range_display: data.car_year_display,
+          generation_code: null,
+          trim_id: data.trim_id || null,
+          trim_name: null,
+        });
+      }
     }
     setLoading(false);
   }
@@ -240,7 +250,6 @@ function EditPartPageContent() {
 
     if (totalPhotoCount === 0) {
       setPhotoError("ต้องมีรูปอย่างน้อย 1 รูปก่อนบันทึก");
-      alert("⚠️ กรุณาถ่าย/แนบรูปอย่างน้อย 1 รูปก่อนบันทึก");
       return;
     }
 
@@ -557,22 +566,45 @@ function EditPartPageContent() {
         </label>
 
         <label>
-          🔍 เลือกรถ (ยี่ห้อ → รุ่น → ปี → รุ่นย่อยถ้ามี) — เปลี่ยนถ้าต้องการ
-          {!loading && (
-            <CarCascadeSelect
-              initialGenerationId={form.generation_id}
-              initialTrimId={form.trim_id}
-              onSelect={(item) => {
-                setForm((f) => ({
-                  ...f,
-                  car_brand: item?.brand_name || "",
-                  car_model: item?.model_name || "",
-                }));
-                setSelectedGeneration(item);
-              }}
-            />
-          )}
+          รถปัจจุบันของอะไหล่ชิ้นนี้
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 8,
+              border: "1px solid var(--border-strong)",
+              background: "var(--surface-dim)",
+              fontSize: 14,
+            }}
+          >
+            {form.car_brand || form.car_model
+              ? `${form.car_brand || ""} ${form.car_model || ""}`.trim()
+              : "— ยังไม่มีข้อมูลรถ —"}
+          </div>
         </label>
+
+        <label>
+          🔍 ค้นหารถ (ยี่ห้อ/รุ่น) — พิมพ์แล้วเลือกเฉพาะเมื่อต้องการเปลี่ยนรถของอะไหล่ชิ้นนี้
+          <CarAutocomplete
+            onSelect={(item) => {
+              setForm((f) => ({
+                ...f,
+                car_brand: item?.brand_name || "",
+                car_model: item?.model_name || "",
+              }));
+              setSelectedGeneration(item);
+            }}
+          />
+        </label>
+
+        <TrimSelect
+          generationId={selectedGeneration?.generation_id}
+          initialTrimId={form.trim_id}
+          onChange={(trim) =>
+            setSelectedGeneration((g) =>
+              g ? { ...g, trim_id: trim?.trim_id || null, trim_name: trim?.trim_name || null } : g
+            )
+          }
+        />
 
         <label>
           ปีที่ผลิต (ดึงจากฐานข้อมูลอัตโนมัติ — แก้เองไม่ได้)
@@ -592,7 +624,7 @@ function EditPartPageContent() {
                     ? ` (${selectedGeneration.generation_code})`
                     : ""
                 }${selectedGeneration.trim_name ? ` · รุ่นย่อย: ${selectedGeneration.trim_name}` : ""}`
-              : "— ไม่มีข้อมูลปี เลือกรถด้านบนเพื่ออัปเดต —"}
+              : "— ไม่มีข้อมูลปี เลือกรถจากช่องค้นหาด้านบนเพื่ออัปเดต —"}
           </div>
         </label>
 
