@@ -39,7 +39,7 @@ function isActive(pathname, href) {
 export default function AppShell({ children, title }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
-  const { currentShop, currentShopId, memberships, switchShop, currentRole, signOut } = useAuth();
+  const { currentShop, currentShopId, memberships, switchShop, currentRole, signOut, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
   const canSeeReports = currentRole === "owner" || currentRole === "manager";
@@ -131,7 +131,11 @@ export default function AppShell({ children, title }) {
             <ThemeSwitchArrow theme={theme} />
             <span className="app-theme-switch-text">{theme === "light" ? "Dark" : "Light"}</span>
           </button>
-          <div className="app-sidebar-role">บทบาท: {currentRole}</div>
+          <div className="app-sidebar-role">
+            บทบาท: {currentRole}
+            <br />
+            {currentShop?.contact_name || currentShop?.login_username || user?.email || "-"}
+          </div>
           <button type="button" className="app-sidebar-signout" onClick={signOut}>
             ออกจากระบบ
           </button>
