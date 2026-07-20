@@ -9,7 +9,7 @@ import { useAuth } from "../../lib/AuthProvider";
 function LoginFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { session, loading } = useAuth();
+  const { session, loading, sessionError } = useAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,6 +27,15 @@ function LoginFormContent() {
       setMsg({ type: "error", text: "ระบบออกจากระบบอัตโนมัติเนื่องจากไม่มีการใช้งาน" });
     }
   }, [searchParams]);
+
+  // แก้บั๊ก "silent session kick": sessionError ถูก set ไว้ใน AuthProvider ตอน login
+  // สำเร็จแต่ลงทะเบียน session ไม่ผ่าน (เช่น ชนกับ concurrent session limit ของ tier)
+  // แต่เดิมไม่เคยถูกเอามาแสดงเลย ผู้ใช้โดนเด้งกลับมาหน้านี้เฉยๆ โดยไม่รู้สาเหตุ
+  useEffect(() => {
+    if (sessionError) {
+      setMsg({ type: "error", text: sessionError });
+    }
+  }, [sessionError]);
 
   useEffect(() => {
     if (!loading && session) {

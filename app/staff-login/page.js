@@ -9,7 +9,7 @@ import { usernameToStaffEmail, normalizeUsername } from "../../lib/staffAuth";
 
 export default function StaffLoginPage() {
   const router = useRouter();
-  const { session, loading } = useAuth();
+  const { session, loading, sessionError } = useAuth();
 
   const [username, setUsername] = useState("");
   const [pin, setPin] = useState("");
@@ -21,6 +21,14 @@ export default function StaffLoginPage() {
       router.replace("/");
     }
   }, [loading, session, router]);
+
+  // แก้บั๊ก "silent session kick" — เหมือน /login (ดูคอมเมนต์ที่นั่น) พนักงานที่ login ด้วย
+  // username+PIN ก็ต้องเห็นข้อความอธิบายเหมือนกัน ไม่ใช่แค่บัญชีอีเมล
+  useEffect(() => {
+    if (sessionError) {
+      setMsg({ type: "error", text: sessionError });
+    }
+  }, [sessionError]);
 
   async function handleSubmit(e) {
     e.preventDefault();
