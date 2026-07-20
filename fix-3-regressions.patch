@@ -1,0 +1,107 @@
+diff --git a/app/add/page.js b/app/add/page.js
+index 517c327..0087a7d 100644
+--- a/app/add/page.js
++++ b/app/add/page.js
+@@ -150,6 +150,7 @@ function AddPartPageContent() {
+ 
+     if (photos.length === 0) {
+       setPhotoError("ต้องมีรูปอย่างน้อย 1 รูปก่อนบันทึก");
++      alert("⚠️ กรุณาถ่าย/แนบรูปอย่างน้อย 1 รูปก่อนบันทึก");
+       return;
+     }
+ 
+diff --git a/app/admin/page.js b/app/admin/page.js
+index 9991f1c..c9d8c8f 100644
+--- a/app/admin/page.js
++++ b/app/admin/page.js
+@@ -93,7 +93,8 @@ function ChangePinCard() {
+ }
+ 
+ function ShopInfoCard() {
+-  const { currentShopId } = useAuth();
++  const { currentShopId, currentShop } = useAuth();
++  const [companyName, setCompanyName] = useState("");
+   const [address, setAddress] = useState("");
+   const [taxId, setTaxId] = useState("");
+   const [phone, setPhone] = useState("");
+@@ -105,11 +106,12 @@ function ShopInfoCard() {
+     if (!currentShopId) return;
+     supabase
+       .from("shops")
+-      .select("address, tax_id, phone")
++      .select("company_name, address, tax_id, phone")
+       .eq("shop_id", currentShopId)
+       .single()
+       .then(({ data }) => {
+         if (data) {
++          setCompanyName(data.company_name || "");
+           setAddress(data.address || "");
+           setTaxId(data.tax_id || "");
+           setPhone(data.phone || "");
+@@ -125,7 +127,7 @@ function ShopInfoCard() {
+ 
+     const { data, error } = await supabase
+       .from("shops")
+-      .update({ address, tax_id: taxId, phone })
++      .update({ company_name: companyName, address, tax_id: taxId, phone })
+       .eq("shop_id", currentShopId)
+       .select();
+ 
+@@ -154,6 +156,19 @@ function ShopInfoCard() {
+       {msg && <div className={`msg ${msg.type}`} style={{ marginBottom: 10 }}>{msg.text}</div>}
+ 
+       <form onSubmit={handleSave}>
++        <label>
++          ชื่อบริษัท (สำหรับพิมพ์บนเอกสาร)
++          <input
++            type="text"
++            value={companyName}
++            onChange={(e) => setCompanyName(e.target.value)}
++            placeholder={`ถ้าไม่กรอก จะใช้ชื่ออู่ "${currentShop?.shop_name || ""}" แทน`}
++          />
++          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
++            เช่น ชื่อจดทะเบียนนิติบุคคล (&quot;บริษัท ... จำกัด&quot;) ถ้าต่างจากชื่ออู่ที่ใช้เรียกกันประจำวัน —
++            ชื่ออู่ (แสดงในเมนูด้านข้าง) ยังคงเป็น &quot;{currentShop?.shop_name}&quot; เหมือนเดิม ไม่เปลี่ยน
++          </div>
++        </label>
+         <label>
+           ที่อยู่ร้าน/อู่
+           <input
+diff --git a/app/edit/[id]/page.js b/app/edit/[id]/page.js
+index 1a6c62f..8fcad01 100644
+--- a/app/edit/[id]/page.js
++++ b/app/edit/[id]/page.js
+@@ -258,6 +258,7 @@ function EditPartPageContent() {
+ 
+     if (totalPhotoCount === 0) {
+       setPhotoError("ต้องมีรูปอย่างน้อย 1 รูปก่อนบันทึก");
++      alert("⚠️ กรุณาถ่าย/แนบรูปอย่างน้อย 1 รูปก่อนบันทึก");
+       return;
+     }
+ 
+diff --git a/components/AppShell.js b/components/AppShell.js
+index 4bf4a93..dc465a5 100644
+--- a/components/AppShell.js
++++ b/components/AppShell.js
+@@ -39,7 +39,7 @@ function isActive(pathname, href) {
+ export default function AppShell({ children, title }) {
+   const [mobileOpen, setMobileOpen] = useState(false);
+   const pathname = usePathname();
+-  const { currentShop, currentShopId, memberships, switchShop, currentRole, signOut } = useAuth();
++  const { currentShop, currentShopId, memberships, switchShop, currentRole, signOut, user } = useAuth();
+   const { theme, toggleTheme } = useTheme();
+ 
+   const canSeeReports = currentRole === "owner" || currentRole === "manager";
+@@ -131,7 +131,11 @@ export default function AppShell({ children, title }) {
+             <ThemeSwitchArrow theme={theme} />
+             <span className="app-theme-switch-text">{theme === "light" ? "Dark" : "Light"}</span>
+           </button>
+-          <div className="app-sidebar-role">บทบาท: {currentRole}</div>
++          <div className="app-sidebar-role">
++            บทบาท: {currentRole}
++            <br />
++            {currentShop?.contact_name || currentShop?.login_username || user?.email || "-"}
++          </div>
+           <button type="button" className="app-sidebar-signout" onClick={signOut}>
+             ออกจากระบบ
+           </button>
