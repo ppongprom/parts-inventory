@@ -18,9 +18,18 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
   const [activeIndex, setActiveIndex] = useState(-1);
   const wrapperRef = useRef(null);
   const debounceRef = useRef(null);
+  const skipNextSearchRef = useRef(false);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (skipNextSearchRef.current) {
+      // query เพิ่งถูกเซ็ตจาก handleSelect (ไม่ใช่ผู้ใช้พิมพ์) — ไม่ต้อง search ซ้ำ
+      // ป้องกัน false "ไม่พบในฐานข้อมูล" เมื่อ model_name/trim_name มีอักขระ
+      // ที่เป็น reserved character ใน PostgREST filter syntax เช่น "Yaris (XP150)"
+      skipNextSearchRef.current = false;
+      return;
+    }
 
     const q = query.trim();
     if (q.length < 2) {
@@ -66,6 +75,7 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
 
   function handleSelect(item) {
     onSelect(item);
+    skipNextSearchRef.current = true;
     setQuery(
       `${item.brand_name} ${item.model_name}${item.trim_name ? ` ${item.trim_name}` : ""}`
     );
