@@ -8,6 +8,7 @@ import { getViewMode, setViewMode } from "../lib/viewModeStorage";
 import { useAuth } from "../lib/AuthProvider";
 import RequireAuth from "../components/RequireAuth";
 import { ROLE_PERMISSIONS } from "../config/rolePermissions";
+import { getDescendantIds, formatBreadcrumb } from "../lib/zoneHelpers";
 
 const PAGE_SIZE = 50;
 
@@ -117,7 +118,7 @@ function HomePageContent() {
       query = query.or(`part_name.ilike.%${s}%,car_model.ilike.%${s}%`);
     }
     if (brandFilter) query = query.eq("car_brand", brandFilter);
-    if (zoneFilter) query = query.eq("zone_code", zoneFilter);
+    if (zoneFilter) query = query.in("zone_id", getDescendantIds(zones, zoneFilter));
 
     const from = pageNum * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
@@ -226,8 +227,8 @@ function HomePageContent() {
         <select value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value)}>
           <option value="">ทุกโซน</option>
           {zones.map((z) => (
-            <option key={z.id} value={z.code}>
-              {z.code}
+            <option key={z.id} value={z.id}>
+              {formatBreadcrumb(zones, z.id)}
               {z.name ? ` — ${z.name}` : ""}
             </option>
           ))}
@@ -336,7 +337,8 @@ function HomePageContent() {
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {p.item_type === "consumable" && <span className="tag">🧴 สิ้นเปลือง</span>}
-                  {p.zone_code && <span className="tag zone">📍 {p.zone_code}</span>}
+                  {p.zone_id && <span className="tag zone">📍 {formatBreadcrumb(zones, p.zone_id)}</span>}
+                  {!p.zone_id && p.zone_code && <span className="tag zone">📍 {p.zone_code}</span>}
                   {p.condition && <span className="tag">{p.condition}</span>}
                   {p.source_type && <span className="tag">{p.source_type}</span>}
                   {p.status && <span className="tag">{p.status}</span>}

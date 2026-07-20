@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabaseClient";
 import CarAutocomplete from "../../components/CarAutocomplete";
+import ZoneCascadeSelect from "../../components/ZoneCascadeSelect";
 import { getDefaultZone, setDefaultZone } from "../../lib/zoneStorage";
 import { resizeImageFile } from "../../lib/imageResize";
 import { uploadPartPhotos } from "../../lib/storageHelpers";
@@ -25,7 +26,7 @@ function AddPartPageContent() {
     car_brand: "",
     car_model: "",
     condition: "",
-    zone_code: "",
+    zone_id: "",
     source_type: "",
     quantity: "1",
     min_stock_level: "",
@@ -53,9 +54,9 @@ function AddPartPageContent() {
   const [optionsLoading, setOptionsLoading] = useState(true);
 
   useEffect(() => {
-    const lastZone = getDefaultZone();
-    if (lastZone) {
-      setForm((f) => ({ ...f, zone_code: lastZone }));
+    const lastZoneId = getDefaultZone();
+    if (lastZoneId) {
+      setForm((f) => ({ ...f, zone_id: lastZoneId }));
     }
     if (currentShopId) {
       fetchZones();
@@ -117,10 +118,9 @@ function AddPartPageContent() {
     return `https://www.amayama.com/en/genuine-catalogs/${encodeURIComponent(brand)}`;
   }
 
-  function handleZoneChange(e) {
-    const value = e.target.value;
-    setForm((f) => ({ ...f, zone_code: value }));
-    setDefaultZone(value);
+  function handleZoneChange(zoneId) {
+    setForm((f) => ({ ...f, zone_id: zoneId || "" }));
+    setDefaultZone(zoneId || "");
   }
 
   async function handlePhotoChange(e) {
@@ -169,7 +169,7 @@ function AddPartPageContent() {
         car_year_display: selectedGeneration?.year_range_display || null,
         trim_id: selectedGeneration?.trim_id || null,
         condition: form.condition || null,
-        zone_code: form.zone_code || null,
+        zone_id: form.zone_id || null,
         source_type: form.source_type || null,
         quantity: form.quantity ? Number(form.quantity) : 1,
         item_type: form.item_type,
@@ -186,7 +186,7 @@ function AddPartPageContent() {
 
       if (insertError) throw insertError;
 
-      const keepZone = form.zone_code;
+      const keepZoneId = form.zone_id;
 
       setMsg({ type: "success", text: "บันทึกอะไหล่เรียบร้อยแล้ว ✅" });
       setForm({
@@ -194,7 +194,7 @@ function AddPartPageContent() {
         car_brand: "",
         car_model: "",
         condition: conditions[0] || "",
-        zone_code: keepZone,
+        zone_id: keepZoneId,
         source_type: sourceTypes[0] || "",
         price: "",
         part_number: "",
@@ -523,15 +523,9 @@ function AddPartPageContent() {
 
         <label>
           โซนจัดเก็บ
-          <select name="zone_code" value={form.zone_code} onChange={handleZoneChange}>
-            <option value="">ไม่ระบุโซน</option>
-            {zones.map((z) => (
-              <option key={z.id} value={z.code}>
-                {z.code}
-                {z.name ? ` — ${z.name}` : ""}
-              </option>
-            ))}
-          </select>
+          {!zonesLoading && (
+            <ZoneCascadeSelect zones={zones} value={form.zone_id || null} onChange={handleZoneChange} />
+          )}
           {!zonesLoading && zones.length === 0 && (
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
               ยังไม่มีโซนในระบบ —{" "}
