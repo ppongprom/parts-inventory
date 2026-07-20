@@ -8,7 +8,7 @@ import { getViewMode, setViewMode } from "../lib/viewModeStorage";
 import { useAuth } from "../lib/AuthProvider";
 import RequireAuth from "../components/RequireAuth";
 import { ROLE_PERMISSIONS } from "../config/rolePermissions";
-import { getDescendantIds, formatBreadcrumb } from "../lib/zoneHelpers";
+import { getDescendantIds, formatBreadcrumb, getSortedZoneList } from "../lib/zoneHelpers";
 
 const PAGE_SIZE = 50;
 
@@ -84,7 +84,7 @@ function HomePageContent() {
       .from("zones")
       .select("*")
       .eq("shop_id", currentShopId)
-      .order("name", { ascending: true });
+      .order("code", { ascending: true });
     if (!error) setZones(data || []);
   }
 
@@ -226,7 +226,7 @@ function HomePageContent() {
         </select>
         <select value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value)}>
           <option value="">ทุกโซน</option>
-          {zones.map((z) => (
+          {getSortedZoneList(zones).map((z) => (
             <option key={z.id} value={z.id}>
               {formatBreadcrumb(zones, z.id)}
               {z.name ? ` — ${z.name}` : ""}
