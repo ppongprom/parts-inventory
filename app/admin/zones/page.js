@@ -6,12 +6,21 @@ import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthProvider";
 import RequireAuth from "../../../components/RequireAuth";
 import { getChildren, getAncestorChain } from "../../../lib/zoneHelpers";
+import ZoneTreeNode from "../../../components/ZoneTreeNode";
 
 const OWNER_TYPE_LABELS = {
   own: "ของร้านเอง",
   consignment: "ฝากขาย",
   investor: "นักลงทุนร่วม",
 };
+
+const LEVEL_NAME = ["โซน (Area)", "ชั้น/แร็ค (Rack)", "ระดับ (Level)"];
+// sentinel แทน "เพิ่ม Area บนสุด" เพื่อไม่ให้ชนกับ null (null = ไม่มีฟอร์ม add เปิดอยู่)
+const ROOT_LEVEL = "__root__";
+
+function levelLabelForIndex(idx) {
+  return LEVEL_NAME[idx] || `ระดับย่อย ${idx + 1}`;
+}
 
 function ZonesAdminPageContent() {
   const { currentShopId } = useAuth();
@@ -20,8 +29,11 @@ function ZonesAdminPageContent() {
   const [msg, setMsg] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const [currentParentId, setCurrentParentId] = useState(null); // null = ระดับบนสุด (Area)
+  // ขยาย/ย่อ ทีละโหนด — เก็บเป็น set ของ zone.id ที่ "ขยายอยู่" (default ย่อทั้งหมด)
+  const [expandedIds, setExpandedIds] = useState(new Set());
 
+  // ฟอร์ม add เปิดอยู่ใต้โหนดไหน: null = ปิด, ROOT_LEVEL = เพิ่ม Area บนสุด, หรือ zone.id
+  const [addingUnderId, setAddingUnderId] = useState(null);
   const [newCode, setNewCode] = useState("");
   const [newName, setNewName] = useState("");
   const [newOwnerType, setNewOwnerType] = useState("own");
@@ -54,16 +66,47 @@ function ZonesAdminPageContent() {
     setLoading(false);
   }
 
-  async function handleAdd(e) {
-    e.preventDefault();
+  function toggleExpand(id) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function expandAll() {
+    setExpandedIds(new Set(zones.map((z) => z.id)));
+  }
+
+  function collapseAll() {
+    setExpandedIds(new Set());
+  }
+
+  function startAdd(parentId) {
+    setEditingZoneId(null);
+    setMsg(null);
+    setNewCode("");
+    setNewName("");
+    setNewOwnerType("own");
+    setAddingUnderId(parentId);
+  }
+
+  function cancelAdd() {
+    setAddingUnderId(null);
+  }
+
+  async function handleAdd(parentId) {
     if (!newCode.trim()) return;
 
     setSaving(true);
     setMsg(null);
 
+    const dbParentId = parentId === ROOT_LEVEL ? null : parentId;
+
     const { error } = await supabase.from("zones").insert({
       shop_id: currentShopId,
-      parent_id: currentParentId,
+      parent_id: dbParentId,
       code: newCode.trim(),
       name: newName.trim() || null,
       owner_type: newOwnerType,
@@ -75,16 +118,19 @@ function ZonesAdminPageContent() {
         : error.message;
       setMsg({ type: "error", text: "เพิ่มโซนไม่สำเร็จ: " + friendly });
     } else {
-      setNewCode("");
-      setNewName("");
-      setNewOwnerType("own");
       setMsg({ type: "success", text: "เพิ่มโซนแล้ว ✅" });
+      // ขยายโหนดพ่อให้เห็นลูกใหม่ทันที (ถ้าไม่ใช่ root)
+      if (dbParentId) {
+        setExpandedIds((prev) => new Set([...prev, dbParentId]));
+      }
+      setAddingUnderId(null);
       fetchZones();
     }
     setSaving(false);
   }
 
   function startEdit(zone) {
+    setAddingUnderId(null);
     setEditingZoneId(zone.id);
     setEditCode(zone.code);
     setEditName(zone.name || "");
@@ -161,60 +207,31 @@ function ZonesAdminPageContent() {
     }
   }
 
-  const breadcrumb = currentParentId ? getAncestorChain(zones, currentParentId) : [];
-  const visibleZones = getChildren(zones, currentParentId);
-  const levelDepth = breadcrumb.length; // 0 = กำลังดู Area ชั้นบนสุด
+  function renderAddForm(parentId) {
+    const idx = parentId === ROOT_LEVEL ? 0 : getAncestorChain(zones, parentId).length;
+    const label = levelLabelForIndex(idx);
 
-  const LEVEL_NAME = ["โซน (Area)", "ชั้น/แร็ค (Rack)", "ระดับ (Level)"];
-  const currentLevelLabel = LEVEL_NAME[levelDepth] || `ระดับย่อย ${levelDepth + 1}`;
-
-  return (
-    <div className="container">
-      <div className="header">
-        <h1>⚙️ จัดการโซนจัดเก็บ</h1>
-        <Link href="/admin" className="nav-link secondary">
-          ← กลับ
-        </Link>
-      </div>
-
-      {/* breadcrumb ไล่ชั้น */}
-      <div style={{ marginBottom: 12, fontSize: 13, display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
-        <button
-          type="button"
-          onClick={() => setCurrentParentId(null)}
-          style={{ background: "none", border: "none", color: "var(--link)", cursor: "pointer", padding: 0, fontSize: 13 }}
-        >
-          🏠 ทั้งหมด
-        </button>
-        {breadcrumb.map((z) => (
-          <span key={z.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ color: "var(--text-muted)" }}>›</span>
-            <button
-              type="button"
-              onClick={() => setCurrentParentId(z.id)}
-              style={{ background: "none", border: "none", color: "var(--link)", cursor: "pointer", padding: 0, fontSize: 13 }}
-            >
-              {z.code}
-            </button>
-          </span>
-        ))}
-      </div>
-
-      {msg && (
-        <div className={`msg ${msg.type}`} style={{ marginBottom: 16, whiteSpace: "pre-line" }}>
-          {msg.text}
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleAdd(parentId);
+        }}
+        className="card"
+        style={{ cursor: "default", flexDirection: "column", alignItems: "stretch", gap: 8 }}
+      >
+        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+          กำลังเพิ่ม{label}ใหม่{parentId !== ROOT_LEVEL ? " — เป็นโซนย่อยของด้านบนนี้" : " — ระดับบนสุด"}
         </div>
-      )}
-
-      <form onSubmit={handleAdd} style={{ marginBottom: 24 }}>
         <label>
-          รหัส{currentLevelLabel}ใหม่ *
+          รหัส{label} *
           <input
             type="text"
             value={newCode}
             onChange={(e) => setNewCode(e.target.value)}
-            placeholder={levelDepth === 0 ? "เช่น A1" : "เช่น R2 หรือ L3"}
+            placeholder={parentId === ROOT_LEVEL ? "เช่น A1" : "เช่น R2 หรือ L3"}
             required
+            autoFocus
           />
         </label>
         <label>
@@ -229,143 +246,174 @@ function ZonesAdminPageContent() {
         <label>
           เจ้าของของในโซนนี้ (ค่าเริ่มต้นของอะไหล่ที่เพิ่มใหม่ในนี้)
           <select value={newOwnerType} onChange={(e) => setNewOwnerType(e.target.value)}>
-            {Object.entries(OWNER_TYPE_LABELS).map(([val, label]) => (
+            {Object.entries(OWNER_TYPE_LABELS).map(([val, l]) => (
               <option key={val} value={val}>
-                {label}
+                {l}
               </option>
             ))}
           </select>
         </label>
-        <button type="submit" disabled={saving}>
-          {saving ? "กำลังเพิ่ม..." : `+ เพิ่ม${currentLevelLabel}`}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="submit" disabled={saving}>
+            {saving ? "กำลังเพิ่ม..." : "เพิ่ม"}
+          </button>
+          <button
+            type="button"
+            onClick={cancelAdd}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid var(--border-strong)",
+              background: "transparent",
+              color: "var(--text-muted)",
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            ยกเลิก
+          </button>
+        </div>
       </form>
+    );
+  }
 
-      {loading && <div className="empty">กำลังโหลด...</div>}
+  function renderEditForm(zone) {
+    const idx = getAncestorChain(zones, zone.id).length - 1;
+    const label = levelLabelForIndex(idx);
 
-      {!loading && visibleZones.length === 0 && (
-        <div className="empty">
-          {levelDepth === 0 ? "ยังไม่มีโซนในระบบ — เพิ่มโซนแรกด้านบนได้เลย" : "ยังไม่มีโซนย่อยในนี้ — เพิ่มด้านบนได้เลย"}
+    return (
+      <form
+        onSubmit={handleEditSubmit}
+        className="card"
+        style={{ cursor: "default", flexDirection: "column", alignItems: "stretch", gap: 8 }}
+      >
+        <label>
+          รหัส{label} *
+          <input
+            type="text"
+            value={editCode}
+            onChange={(e) => setEditCode(e.target.value)}
+            required
+            autoFocus
+          />
+        </label>
+        <label>
+          ชื่อ/คำอธิบาย (ไม่บังคับ)
+          <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} />
+        </label>
+        <label>
+          เจ้าของของในโซนนี้
+          <select value={editOwnerType} onChange={(e) => setEditOwnerType(e.target.value)}>
+            {Object.entries(OWNER_TYPE_LABELS).map(([val, l]) => (
+              <option key={val} value={val}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="submit" disabled={savingEdit}>
+            {savingEdit ? "กำลังบันทึก..." : "บันทึก"}
+          </button>
+          <button
+            type="button"
+            onClick={cancelEdit}
+            style={{
+              padding: "8px 14px",
+              borderRadius: 8,
+              border: "1px solid var(--border-strong)",
+              background: "transparent",
+              color: "var(--text-muted)",
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            ยกเลิก
+          </button>
+        </div>
+      </form>
+    );
+  }
+
+  const rootZones = getChildren(zones, null);
+
+  return (
+    <div className="container">
+      <div className="header">
+        <h1>⚙️ จัดการโซนจัดเก็บ</h1>
+        <Link href="/admin" className="nav-link secondary">
+          ← กลับ
+        </Link>
+      </div>
+
+      {msg && (
+        <div className={`msg ${msg.type}`} style={{ marginBottom: 16, whiteSpace: "pre-line" }}>
+          {msg.text}
         </div>
       )}
 
-      {visibleZones.map((z) => {
-        const childCount = getChildren(zones, z.id).length;
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+        <button type="button" onClick={() => startAdd(ROOT_LEVEL)}>
+          + เพิ่มโซนบนสุด (Area)
+        </button>
+        <button
+          type="button"
+          onClick={expandAll}
+          style={{
+            padding: "8px 14px",
+            borderRadius: 8,
+            border: "1px solid var(--border-strong)",
+            background: "transparent",
+            color: "var(--text)",
+            fontSize: 13,
+            cursor: "pointer",
+          }}
+        >
+          ขยายทั้งหมด
+        </button>
+        <button
+          type="button"
+          onClick={collapseAll}
+          style={{
+            padding: "8px 14px",
+            borderRadius: 8,
+            border: "1px solid var(--border-strong)",
+            background: "transparent",
+            color: "var(--text)",
+            fontSize: 13,
+            cursor: "pointer",
+          }}
+        >
+          ย่อทั้งหมด
+        </button>
+      </div>
 
-        if (editingZoneId === z.id) {
-          return (
-            <form
-              onSubmit={handleEditSubmit}
-              className="card"
-              key={z.id}
-              style={{ cursor: "default", flexDirection: "column", alignItems: "stretch", gap: 8 }}
-            >
-              <label>
-                รหัส{currentLevelLabel} *
-                <input
-                  type="text"
-                  value={editCode}
-                  onChange={(e) => setEditCode(e.target.value)}
-                  required
-                  autoFocus
-                />
-              </label>
-              <label>
-                ชื่อ/คำอธิบาย (ไม่บังคับ)
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                />
-              </label>
-              <label>
-                เจ้าของของในโซนนี้
-                <select value={editOwnerType} onChange={(e) => setEditOwnerType(e.target.value)}>
-                  {Object.entries(OWNER_TYPE_LABELS).map(([val, label]) => (
-                    <option key={val} value={val}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button type="submit" disabled={savingEdit}>
-                  {savingEdit ? "กำลังบันทึก..." : "บันทึก"}
-                </button>
-                <button
-                  type="button"
-                  onClick={cancelEdit}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 8,
-                    border: "1px solid var(--border-strong)",
-                    background: "transparent",
-                    color: "var(--text-muted)",
-                    fontSize: 13,
-                    cursor: "pointer",
-                  }}
-                >
-                  ยกเลิก
-                </button>
-              </div>
-            </form>
-          );
-        }
+      {addingUnderId === ROOT_LEVEL && renderAddForm(ROOT_LEVEL)}
 
-        return (
-          <div
-            className="card"
-            key={z.id}
-            style={{ cursor: "default", alignItems: "center", justifyContent: "space-between" }}
-          >
-            <div
-              className="card-body"
-              style={{ cursor: "pointer" }}
-              onClick={() => setCurrentParentId(z.id)}
-            >
-              <div className="card-title">
-                {z.code} {childCount > 0 && <span style={{ fontSize: 12, color: "var(--text-muted)" }}>({childCount} โซนย่อย) ›</span>}
-              </div>
-              <div className="card-sub">
-                {z.name && <>{z.name} · </>}
-                {OWNER_TYPE_LABELS[z.owner_type] || z.owner_type}
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-              <button
-                type="button"
-                onClick={() => startEdit(z)}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  border: "1px solid var(--border-strong)",
-                  background: "transparent",
-                  color: "var(--text)",
-                  fontSize: 13,
-                  cursor: "pointer",
-                }}
-              >
-                แก้ไข
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDelete(z)}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 8,
-                  border: "1px solid var(--danger-border)",
-                  background: "transparent",
-                  color: "var(--danger-text)",
-                  fontSize: 13,
-                  cursor: "pointer",
-                }}
-              >
-                ลบ
-              </button>
-            </div>
-          </div>
-        );
-      })}
+      {loading && <div className="empty">กำลังโหลด...</div>}
+
+      {!loading && rootZones.length === 0 && (
+        <div className="empty">ยังไม่มีโซนในระบบ — เพิ่มโซนแรกด้านบนได้เลย</div>
+      )}
+
+      {rootZones.map((z) => (
+        <ZoneTreeNode
+          key={z.id}
+          zone={z}
+          zones={zones}
+          depth={0}
+          expandedIds={expandedIds}
+          onToggleExpand={toggleExpand}
+          editingZoneId={editingZoneId}
+          addingUnderId={addingUnderId}
+          onStartEdit={startEdit}
+          onStartAdd={startAdd}
+          onDelete={handleDelete}
+          renderEditForm={renderEditForm}
+          renderAddForm={renderAddForm}
+          ownerTypeLabels={OWNER_TYPE_LABELS}
+        />
+      ))}
     </div>
   );
 }
