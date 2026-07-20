@@ -352,7 +352,7 @@ function NewJobPageContent() {
           </select>
         </label>
 
-        <label>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 6 }}>
           แผนภาพจุดเสียหาย (แตะบนรูปเพื่อมาร์กจุด — ไม่บังคับ)
           <CarDamageDiagram
             points={damagePoints}
@@ -360,7 +360,7 @@ function NewJobPageContent() {
             carType={carDiagramType}
             onCarTypeChange={setCarDiagramType}
           />
-        </label>
+        </div>
 
         <label>
           หมายเหตุ
