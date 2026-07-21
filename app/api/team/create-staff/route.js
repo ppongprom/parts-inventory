@@ -27,6 +27,9 @@ export async function POST(request) {
     // การ์ด "Field Scanner Role + temp account auto-expiry" — เฉพาะ role นี้เท่านั้นที่ตั้ง
     // วันหมดอายุได้ตอนสร้าง (บัญชีปกติอื่นๆ ไม่มีวันหมดอายุ)
     const expiresAt = role === "field_scanner" && body.expires_at ? body.expires_at : null;
+    // การ์ด "Onboarding Burst Mode" — บัญชี field_scanner ที่มีวันหมดอายุ = บัญชีชั่วคราวของ Burst
+    // Mode (Day 0 รุมเก็บข้อมูล) ไม่ใช่บัญชี field_scanner ถาวรทั่วไป
+    const isBurstModeAccount = role === "field_scanner" && !!expiresAt;
 
     if (!shopId || !role || !username || !pin || !contactName || !contactPhone) {
       return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
@@ -53,11 +56,48 @@ export async function POST(request) {
       return NextResponse.json({ error: managerCheck.error }, { status: managerCheck.status });
     }
 
-    // 2) ตรวจ tier limit
-    const seatCheck = await checkSeatLimit(shopId);
-    if (!seatCheck.ok) {
-      return NextResponse.json({ error: seatCheck.error }, { status: 400 });
+    // 2) ตรวจ tier limit — บัญชี Burst Mode (field_scanner ชั่วคราว) ไม่นับรวมกับที่นั่งปกติ
+    // ("Day 0: อนุญาต temp login สูงสุด 20 บัญชี... ไม่ผูกกับ concurrent cap ปกติ" ในการ์ด — ขยาย
+    // ความเดียวกันมาถึงที่นั่ง/roster cap ด้วย เพราะจุดประสงค์คือให้รุมเก็บข้อมูลได้โดยไม่ต้องไป
+    // แย่งที่นั่งพนักงานถาวรของแพ็กเกจ — เป็นการตีความของเราเอง ไม่ใช่มติที่การ์ดระบุตรงๆ)
+    let shopForBurstCheck = null;
+    if (isBurstModeAccount) {
+      const BURST_MODE_MAX_ACCOUNTS = 20; // fixed ทุก tier (ดูหมายเหตุใน db/onboarding_burst_mode_migration.sql)
+      const { count: burstCount, error: burstCountError } = await supabaseAdmin
+        .from("shop_members")
+        .select("member_id", { count: "exact", head: true })
+        .eq("shop_id", shopId)
+        .eq("role", "field_scanner")
+        .not("expires_at", "is", null)
+        .in("status", ["active", "invited"]);
+      if (burstCountError) throw burstCountError;
+      if ((burstCount || 0) >= BURST_MODE_MAX_ACCOUNTS) {
+        return NextResponse.json(
+          { error: `บัญชีชั่วคราว Burst Mode เต็มโควตาแล้ว (สูงสุด ${BURST_MODE_MAX_ACCOUNTS} บัญชี)` },
+          { status: 400 }
+        );
+      }
+      const { data: shopRow, error: shopError } = await supabaseAdmin
+        .from("shops")
+        .select("subscription_plan")
+        .eq("shop_id", shopId)
+        .single();
+      if (shopError) throw shopError;
+      shopForBurstCheck = shopRow;
+    } else {
+      const seatCheck = await checkSeatLimit(shopId);
+      if (!seatCheck.ok) {
+        return NextResponse.json({ error: seatCheck.error }, { status: 400 });
+      }
     }
+
+    // burst_cycle_type จับภาพ plan ของร้าน ณ ตอนสร้างบัญชีนี้ครั้งเดียว (ดูหมายเหตุ assumption
+    // เรื่อง Trial -> Paid ระหว่างรอบใน db/onboarding_burst_mode_migration.sql)
+    const burstCycleType = isBurstModeAccount
+      ? shopForBurstCheck?.subscription_plan === "trial"
+        ? "trial"
+        : "paid"
+      : null;
 
     // 3) ตรวจ username ซ้ำ (unique ทั้งระบบ)
     const { data: existingUsername } = await supabaseAdmin
@@ -99,6 +139,7 @@ export async function POST(request) {
         contact_phone: contactPhone,
         login_username: username,
         expires_at: expiresAt,
+        burst_cycle_type: burstCycleType,
       })
       .select()
       .single();

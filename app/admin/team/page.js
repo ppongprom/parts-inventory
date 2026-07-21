@@ -343,6 +343,35 @@ function TeamPageContent() {
     }
   }
 
+  // การ์ด "Onboarding Burst Mode" — Manager กด "ขอต่ออายุ" (Requester), Owner กด "อนุมัติ/ปฏิเสธ"
+  // (Approver) ต้องคนละคนกันเสมอ (บังคับจริงที่ API ไม่ใช่แค่ซ่อนปุ่ม — ดูหมายเหตุ assumption ที่
+  // ยังไม่ตัดสินใจ (Trial->Paid ระหว่างรอบ, หน้าต่างเวลาที่ขอได้, 20 บัญชี fix ทุก tier ไหม, Owner
+  // ไม่ตอบจนหมดเขต) ใน db/onboarding_burst_mode_migration.sql)
+  const [burstBusyMemberId, setBurstBusyMemberId] = useState(null);
+
+  async function handleBurstExtensionAction(action, payload) {
+    setBurstBusyMemberId(payload.member_id || payload.request_id);
+    setMsg(null);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const res = await fetch("/api/team/burst-mode-extension", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ action, shop_id: currentShopId, ...payload }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "เกิดข้อผิดพลาด");
+      setMsg({ type: "success", text: action === "request" ? "ส่งคำขอต่ออายุแล้ว ✅ รอเจ้าของอู่อนุมัติ" : "บันทึกผลแล้ว ✅" });
+      fetchTeam();
+    } catch (err) {
+      setMsg({ type: "error", text: "ดำเนินการไม่สำเร็จ: " + err.message });
+    } finally {
+      setBurstBusyMemberId(null);
+    }
+  }
+
   const canManage = currentRole === "owner" || currentRole === "manager";
 
   return (
@@ -716,7 +745,60 @@ function TeamPageContent() {
             {m.expires_at && (
               <div className="card-sub" data-testid={`expires-at-${m.member_id}`}>
                 ⏳ หมดอายุ {new Date(m.expires_at).toLocaleDateString("th-TH")}
+                {m.burst_extended && " (ต่ออายุไปแล้ว 1 ครั้ง — ต่อเพิ่มไม่ได้อีก)"}
               </div>
+            )}
+            {/* การ์ด "Onboarding Burst Mode" — Requester (Manager) / Approver (Owner) */}
+            {m.role === "field_scanner" && m.expires_at && !m.burst_extended && (
+              <>
+                {m.pending_extension_request ? (
+                  currentRole === "owner" ? (
+                    <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                      <button
+                        type="button"
+                        disabled={burstBusyMemberId === m.pending_extension_request.request_id}
+                        onClick={() =>
+                          handleBurstExtensionAction("respond", {
+                            request_id: m.pending_extension_request.request_id,
+                            decision: "approved",
+                          })
+                        }
+                        style={{ fontSize: 12, padding: "4px 10px" }}
+                      >
+                        ✓ อนุมัติต่ออายุ
+                      </button>
+                      <button
+                        type="button"
+                        disabled={burstBusyMemberId === m.pending_extension_request.request_id}
+                        onClick={() =>
+                          handleBurstExtensionAction("respond", {
+                            request_id: m.pending_extension_request.request_id,
+                            decision: "rejected",
+                          })
+                        }
+                        style={{ fontSize: 12, padding: "4px 10px" }}
+                      >
+                        ✕ ปฏิเสธ
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="card-sub" style={{ color: "var(--warn-text, #b45309)" }}>
+                      ⏳ รอเจ้าของอู่อนุมัติการต่ออายุ
+                    </div>
+                  )
+                ) : (
+                  currentRole === "manager" && (
+                    <button
+                      type="button"
+                      disabled={burstBusyMemberId === m.member_id}
+                      onClick={() => handleBurstExtensionAction("request", { member_id: m.member_id })}
+                      style={{ fontSize: 12, padding: "4px 10px", marginTop: 4 }}
+                    >
+                      ขอต่ออายุ
+                    </button>
+                  )
+                )}
+              </>
             )}
           </div>
           {canManage && m.role !== "owner" && (

@@ -31,18 +31,29 @@ export async function POST(request) {
 
     const { data: members, error } = await supabaseAdmin
       .from("shop_members")
-      .select("member_id, role, status, login_username, contact_name, user_id, expires_at")
+      .select(
+        "member_id, role, status, login_username, contact_name, user_id, expires_at, burst_cycle_type, burst_extended"
+      )
       .eq("shop_id", shopId)
       .neq("status", "removed") // ซ่อนคนที่ถูกลบออกจากรายการนี้ (ข้อมูลยังอยู่ครบ)
       .order("member_id");
 
     if (error) throw error;
 
+    // การ์ด "Onboarding Burst Mode" — ดึงคำขอต่ออายุที่ยัง pending มาผูกกับสมาชิกแต่ละคนด้วย
+    // เพื่อให้หน้า /admin/team โชว์ปุ่ม "อนุมัติ/ปฏิเสธ" (Owner) หรือสถานะ "รออนุมัติ" (Manager) ได้
+    const { data: pendingRequests } = await supabaseAdmin
+      .from("burst_mode_extension_requests")
+      .select("request_id, member_id, status")
+      .eq("shop_id", shopId)
+      .eq("status", "pending");
+
     // ดึงอีเมลของแต่ละคนจาก auth.users มาผูกเพิ่ม (ต้องใช้ admin API ทีละคน)
     const withEmails = await Promise.all(
       (members || []).map(async (m) => {
         const { data: userData } = await supabaseAdmin.auth.admin.getUserById(m.user_id);
-        return { ...m, email: userData?.user?.email || null };
+        const pendingRequest = (pendingRequests || []).find((r) => r.member_id === m.member_id) || null;
+        return { ...m, email: userData?.user?.email || null, pending_extension_request: pendingRequest };
       })
     );
 
