@@ -492,24 +492,25 @@ function AddPartPageContent() {
         </div>
 
         <label>
-          ปีที่ผลิต (ดึงจากฐานข้อมูลอัตโนมัติ — แก้เองไม่ได้)
+          ยี่ห้อ รุ่น ปีผลิต ของอะไหล่
           <div
             style={{
               padding: 12,
               borderRadius: 8,
               border: "1px solid var(--border-strong)",
               background: "var(--surface-dim)",
-              color: selectedGeneration ? "var(--text)" : "var(--text-muted)",
               fontSize: 14,
             }}
           >
-            {selectedGeneration
-              ? `${selectedGeneration.year_range_display}${
-                  selectedGeneration.generation_code
-                    ? ` (${selectedGeneration.generation_code})`
-                    : ""
-                }${selectedGeneration.trim_name ? ` · รุ่นย่อย: ${selectedGeneration.trim_name}` : ""}`
-              : "— เลือกรถจากช่องค้นหาด้านบนก่อน จะขึ้นปีให้อัตโนมัติ —"}
+            {form.car_brand || form.car_model
+              ? `${form.car_brand || ""} ${form.car_model || ""}${
+                  selectedGeneration?.year_range_display ? ` · ${selectedGeneration.year_range_display}` : ""
+                }${
+                  selectedGeneration?.generation_code ? ` (${selectedGeneration.generation_code})` : ""
+                }${
+                  selectedGeneration?.trim_name ? ` · รุ่นย่อย: ${selectedGeneration.trim_name}` : ""
+                }`.trim()
+              : "— ยังไม่ได้เลือกรถ — ค้นหาด้านบนเพื่อเลือก —"}
           </div>
         </label>
 
