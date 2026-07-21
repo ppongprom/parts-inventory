@@ -691,6 +691,11 @@ function EditPartPageContent() {
               ข้อมูลเก่า: &quot;{form.zone_code}&quot; (ยังไม่ได้แมตช์กับโซนใหม่ — เลือกโซนด้านบนเพื่ออัปเดต)
             </div>
           )}
+          {/* การ์ด "ย้ายอะไหล่ระหว่าง Zone" — action แยกจากการแก้ zone_id ตรงๆ ในฟอร์มนี้ เพราะมีเช็ค
+             owner_type ปลายทาง vs ปัจจุบัน + checkbox override ที่ฟอร์มแก้ไขทั่วไปนี้ไม่มี */}
+          <Link href={`/move-part/${id}`} className="nav-link secondary" style={{ fontSize: 12, alignSelf: "flex-start" }}>
+            📍 ย้าย Zone (เช็ค owner_type ให้)
+          </Link>
         </div>
 
         <label>
