@@ -6,6 +6,7 @@ import { useAuth } from "../lib/AuthProvider";
 import { supabase } from "../lib/supabaseClient";
 import IdleSessionGuard from "./IdleSessionGuard";
 import AppShell from "./AppShell";
+import TosConsentGate from "./TosConsentGate";
 
 export default function RequireAuth({ children, allowedRoles }) {
   const router = useRouter();
@@ -101,7 +102,9 @@ export default function RequireAuth({ children, allowedRoles }) {
         router.replace("/login?reason=idle");
       }}
     >
-      <AppShell>{children}</AppShell>
+      <AppShell>
+        <TosConsentGate>{children}</TosConsentGate>
+      </AppShell>
     </IdleSessionGuard>
   );
 }

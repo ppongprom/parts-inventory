@@ -99,6 +99,17 @@ async function installMockAuth(page, { role = "owner", shopId = "11111111-1111-1
       const handled = await extraRoutes(route, url, method);
       if (handled) return;
     }
+    // ค่า default: ถือว่าร้านนี้ "ยอมรับ ToS เวอร์ชันปัจจุบันแล้ว" เสมอ (การ์ด "กลไก ToS consent" —
+    // TosConsentGate ครอบทุกหน้าที่ผ่าน RequireAuth อยู่แล้ว) ไม่งั้นทุกเทสที่มีอยู่ก่อนหน้าการ์ดนี้
+    // จะเจอ gate บล็อกหน้าจอทันทีโดยไม่ได้ตั้งใจ — เทสที่อยากทดสอบ gate เองต้องส่ง extraRoutes มา
+    // ดัก `/rest/v1/shop_tos_acceptances` เองก่อนถึงจุดนี้ (ดู card-tos-consent.spec.js)
+    if (url.includes("/rest/v1/shop_tos_acceptances")) {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([{ tos_version: "__mock_always_accepted__", accepted_at: "2026-01-01T00:00:00Z" }]),
+      });
+    }
     // Default: succeed with empty payload so unhandled calls don't hang the page.
     return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
   });
