@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { getChildren } from "../lib/zoneHelpers";
+import { getChildren, getSortedDescendants } from "../lib/zoneHelpers";
 
 /**
  * โหนดเดียวของ tree โซนจัดเก็บ เรียกตัวเองซ้ำ (recursive) เพื่อ render ลูกหลาน
@@ -26,6 +26,7 @@ export default function ZoneTreeNode({
   const children = getChildren(zones, zone.id);
   const hasChildren = children.length > 0;
   const isExpanded = expandedIds.has(zone.id);
+  const printGroup = getSortedDescendants(zones, zone.id);
 
   if (editingZoneId === zone.id) {
     return <div style={{ marginLeft: depth * 20 }}>{renderEditForm(zone)}</div>;
@@ -71,8 +72,8 @@ export default function ZoneTreeNode({
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           <Link
-            href={`/print-zone-labels?ids=${zone.id}`}
-            title="พิมพ์ QR โซนนี้"
+            href={`/print-zone-labels?ids=${printGroup.map((z) => z.id).join(",")}`}
+            title={printGroup.length > 1 ? `พิมพ์ QR โซนนี้ + ลูกทั้งหมด (${printGroup.length} ดวง)` : "พิมพ์ QR โซนนี้"}
             style={{
               padding: "8px 12px",
               borderRadius: 8,
@@ -83,7 +84,7 @@ export default function ZoneTreeNode({
               textDecoration: "none",
             }}
           >
-            🏷️ QR
+            🏷️ QR{printGroup.length > 1 ? ` (${printGroup.length})` : ""}
           </Link>
           <button
             type="button"
