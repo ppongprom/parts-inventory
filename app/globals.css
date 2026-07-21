@@ -649,3 +649,153 @@ button[type="submit"]:disabled {
     padding: 0 !important;
   }
 }
+
+/* ============================================================
+   หน้าเอกสารกฎหมาย (ToS / Privacy Policy / DPP) — app/legal/*
+   ============================================================ */
+.app-sidebar-legal-link {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 2px 4px;
+}
+
+.app-sidebar-legal-link:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.container-legal {
+  max-width: 860px;
+}
+
+.legal-nav {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 20px;
+}
+
+.legal-nav-tab {
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.legal-nav-tab--active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.legal-doc-header {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.legal-doc-header h1 {
+  font-size: 22px;
+  margin: 0 0 6px;
+}
+
+.legal-doc-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+}
+
+.legal-doc-updated {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.legal-doc-note {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.legal-section {
+  margin-bottom: 26px;
+}
+
+.legal-section h2 {
+  font-size: 16px;
+  margin: 0 0 10px;
+}
+
+.legal-h2 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 12px 0 8px;
+}
+
+.legal-p {
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 10px;
+}
+
+.legal-list {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+
+.legal-list li {
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 6px;
+}
+
+.legal-list--numbered {
+  list-style: decimal;
+}
+
+.legal-table-wrap {
+  overflow-x: auto;
+  margin: 0 0 14px;
+}
+
+.legal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.legal-table th,
+.legal-table td {
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.legal-table th {
+  background: var(--surface-alt);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.legal-table tr:nth-child(even) td {
+  background: var(--surface-dim);
+}
+
+@media (max-width: 640px) {
+  .legal-nav-tab {
+    flex: 1;
+    text-align: center;
+  }
+}

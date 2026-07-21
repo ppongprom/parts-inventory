@@ -139,6 +139,9 @@ export default function AppShell({ children, title }) {
           <button type="button" className="app-sidebar-signout" onClick={signOut}>
             ออกจากระบบ
           </button>
+          <Link href="/legal/tos" className="app-sidebar-legal-link" onClick={() => setMobileOpen(false)}>
+            ToS
+          </Link>
         </div>
       </aside>
 
