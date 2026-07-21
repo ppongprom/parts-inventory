@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthProvider";
 import RequireAuth from "../../../components/RequireAuth";
-import { getChildren, getAncestorChain } from "../../../lib/zoneHelpers";
+import { getChildren, getAncestorChain, getSortedZoneList } from "../../../lib/zoneHelpers";
 import ZoneTreeNode from "../../../components/ZoneTreeNode";
 
 const OWNER_TYPE_LABELS = {
@@ -391,7 +391,7 @@ function ZonesAdminPageContent() {
         {zones.length > 0 && (
           <button
             type="button"
-            onClick={() => router.push(`/print-zone-labels?ids=${zones.map((z) => z.id).join(",")}`)}
+            onClick={() => router.push(`/print-zone-labels?ids=${getSortedZoneList(zones).map((z) => z.id).join(",")}`)}
             style={{
               padding: "8px 14px",
               borderRadius: 8,
