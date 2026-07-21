@@ -87,10 +87,18 @@ where s.current_stock_value = 0; -- idempotent guard: skip shops already backfil
 
 -- ------------------------------------------------------------
 -- State machine transition, called after current_stock_value changes for a shop.
+--
+-- 🔒 security definer (added in the final verification pass tonight — see the note on
+-- fn_update_shop_stock_value below for why this matters): this function UPDATEs `shops`, but
+-- `shops`' own UPDATE RLS policy only allows owner/manager. Without security definer, calling
+-- this from a trigger fired by a supervisor/technician/assistant editing `parts` (the roles that
+-- do this dozens of times a day) would silently fail to update the row at all.
 -- ------------------------------------------------------------
 create or replace function fn_recalc_stock_cap_status(p_shop_id bigint)
 returns void
 language plpgsql
+security definer
+set search_path = public
 as $$
 declare
   v_value numeric;
@@ -146,10 +154,22 @@ $$;
 -- value changes (price * quantity), in the SAME transaction as the parts edit (decided in card),
 -- then immediately re-run the state machine — fully self-contained, no app call site needs to
 -- remember to call anything extra after writing to `parts`.
+--
+-- 🔒 security definer (real bug found in tonight's final verification pass, not caught by
+-- Playwright since those tests mock the network layer and never touch real RLS): `parts` can be
+-- edited by owner/manager/supervisor/technician/assistant, but `shops` UPDATE RLS only allows
+-- owner/manager. A plain (non-definer) trigger function runs with the INVOKING user's RLS
+-- privileges — so a supervisor/technician/assistant editing a part (routine, happens constantly)
+-- would fire this trigger, hit `update shops ...`, and have it silently blocked by RLS: 0 rows
+-- affected, no error surfaced, and the running counter would quietly drift out of sync for the
+-- majority of real day-to-day usage. security definer makes this trigger run with the
+-- function-owner's privileges instead, bypassing that RLS gap for this one controlled write.
 -- ------------------------------------------------------------
 create or replace function fn_update_shop_stock_value()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 declare
   v_shop_id bigint;

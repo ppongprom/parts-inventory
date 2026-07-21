@@ -69,6 +69,19 @@ alter table part_sales add column if not exists not_found_note text;
 
 create index if not exists idx_part_sales_order on part_sales (order_id);
 
+-- 🔒 บั๊กที่แก้ (พบตอนตรวจ RLS ทั้งชุดในรอบ verification สุดท้ายของคืนนี้เอง): part_sales มี RLS
+-- เปิดอยู่แล้วแต่มีแค่ policy insert/select/delete — ไม่เคยมี policy update เลยตั้งแต่ไฟล์
+-- parts_sales_and_stock_deduction_migration.sql เดิม (ก่อนคืนนี้) เพราะตอนนั้นยังไม่มี flow ไหน
+-- ต้อง UPDATE แถว part_sales หลัง insert เลย (ขายทีละชิ้นที่ /edit/[id] insert ครั้งเดียวจบ) — พอ
+-- Cart-based selling flow เพิ่ม step "Confirm Pick" ที่ต้อง UPDATE item_status ทีหลัง (และ
+-- handleMarkNotFound ที่ต้อง UPDATE เหมือนกัน) ทั้งสอง flow นี้จะโดน RLS บล็อกเงียบๆ จริงใน
+-- production (0 แถวถูกแก้ ไม่มี error โยนกลับมาด้วยซ้ำ) แม้ qa-tests จะผ่านหมดเพราะ mock network
+-- ทั้งชุดไม่เคยชน RLS จริง — เจอจากการรัน SQL ตรวจ policy ทั้งตารางกับ staging ตรงๆ ไม่ใช่จาก test
+drop policy if exists "eligible roles can update sales" on part_sales;
+create policy "eligible roles can update sales" on part_sales
+  for update using (is_shop_member(shop_id, array['owner','manager','supervisor','technician','assistant']))
+  with check (is_shop_member(shop_id, array['owner','manager','supervisor','technician','assistant']));
+
 -- ------------------------------------------------------------
 -- 3) part_sale_documents — ใบเสร็จ (receipt เท่านั้นรอบนี้ — ดูหมายเหตุ scope ด้านบน)
 --    ออกตอน Confirm Pick เสร็จ (ไม่ใช่ตอนยืนยันขาย) ตามที่การ์ดตัดสินใจ
