@@ -451,6 +451,12 @@ button[type="submit"]:disabled {
   margin-top: auto;
   display: flex;
   flex-direction: column;
+  gap: 6px;
+}
+
+.app-sidebar-footer-divider {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   padding-top: 16px;
   border-top: 1px solid var(--border);

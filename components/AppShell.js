@@ -121,27 +121,29 @@ export default function AppShell({ children, title }) {
         </nav>
 
         <div className="app-sidebar-footer">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={theme === "dark"}
-            className={`app-theme-switch ${theme === "dark" ? "app-theme-switch--on" : ""}`}
-            onClick={toggleTheme}
-          >
-            <ThemeSwitchArrow theme={theme} />
-            <span className="app-theme-switch-text">{theme === "light" ? "Dark" : "Light"}</span>
-          </button>
-          <div className="app-sidebar-role">
-            บทบาท: {currentRole}
-            <br />
-            {currentShop?.contact_name || currentShop?.login_username || user?.email || "-"}
-          </div>
-          <button type="button" className="app-sidebar-signout" onClick={signOut}>
-            ออกจากระบบ
-          </button>
           <Link href="/legal/tos" className="app-sidebar-legal-link" onClick={() => setMobileOpen(false)}>
             ToS
           </Link>
+          <div className="app-sidebar-footer-divider">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={theme === "dark"}
+              className={`app-theme-switch ${theme === "dark" ? "app-theme-switch--on" : ""}`}
+              onClick={toggleTheme}
+            >
+              <ThemeSwitchArrow theme={theme} />
+              <span className="app-theme-switch-text">{theme === "light" ? "Dark" : "Light"}</span>
+            </button>
+            <div className="app-sidebar-role">
+              บทบาท: {currentRole}
+              <br />
+              {currentShop?.contact_name || currentShop?.login_username || user?.email || "-"}
+            </div>
+            <button type="button" className="app-sidebar-signout" onClick={signOut}>
+              ออกจากระบบ
+            </button>
+          </div>
         </div>
       </aside>
 
