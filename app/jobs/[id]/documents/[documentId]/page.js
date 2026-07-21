@@ -58,6 +58,7 @@ function JobDocumentPageContent() {
 
   const [doc, setDoc] = useState(null);
   const [shopInfo, setShopInfo] = useState(null);
+  const [issuerName, setIssuerName] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [savingSignature, setSavingSignature] = useState(false);
@@ -105,6 +106,16 @@ function JobDocumentPageContent() {
     }
 
     setDoc(data);
+
+    if (data.created_by) {
+      const { data: member } = await supabase
+        .from("shop_members")
+        .select("contact_name, login_username")
+        .eq("user_id", data.created_by)
+        .eq("shop_id", data.shop_id)
+        .maybeSingle();
+      setIssuerName(member?.contact_name || member?.login_username || null);
+    }
 
     // เอกสารเก่าที่สร้างก่อนอัปเดตนี้อาจไม่มีข้อมูลร้านใน snapshot -> เผื่อไปดึงสดแทน
     if (!data.snapshot?.shop_name) {
@@ -472,6 +483,10 @@ function JobDocumentPageContent() {
               <div style={{ textAlign: "center", width: "45%" }}>
                 <div style={{ borderTop: "1px solid var(--text-muted)", paddingTop: 6 }}>
                   ผู้ออกเอกสาร
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+                  {issuerName ? `${issuerName} · ` : ""}
+                  {doc.created_at ? new Date(doc.created_at).toLocaleString("th-TH") : ""}
                 </div>
               </div>
             </div>
