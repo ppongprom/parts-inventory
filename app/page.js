@@ -426,20 +426,63 @@ function HomePageContent() {
 
       {viewMode === "gallery" && (
         <div className="gallery-grid">
-          {parts.map((p) => (
-            <Link href={`/edit/${p.id}`} className="gallery-item" key={p.id}>
-              {p.photo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.photo_url} alt={p.part_name} loading="lazy" decoding="async" />
-              ) : (
-                <div className="no-photo">ไม่มีรูป</div>
-              )}
-              <div className="gallery-caption">
-                {p.part_name}
-                {p.photo_urls?.length > 1 ? ` · 📷${p.photo_urls.length}` : ""}
-              </div>
-            </Link>
-          ))}
+          {parts.map((p) => {
+            const isSelected = selectedIds.includes(p.id);
+            const GalleryWrapper = selectMode ? "div" : Link;
+            const galleryWrapperProps = selectMode
+              ? {
+                  onClick: () =>
+                    setSelectedIds((prev) =>
+                      prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id]
+                    ),
+                }
+              : { href: `/edit/${p.id}` };
+
+            return (
+              <GalleryWrapper
+                {...galleryWrapperProps}
+                className="gallery-item"
+                key={p.id}
+                style={{
+                  cursor: "pointer",
+                  border: isSelected ? "2px solid #2563eb" : undefined,
+                }}
+              >
+                {selectMode && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 6,
+                      right: 6,
+                      zIndex: 1,
+                      width: 22,
+                      height: 22,
+                      borderRadius: "50%",
+                      background: isSelected ? "#2563eb" : "var(--surface-alt)",
+                      border: "1px solid var(--border-strong)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "white",
+                      fontSize: 13,
+                    }}
+                  >
+                    {isSelected ? "✓" : ""}
+                  </div>
+                )}
+                {p.photo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.photo_url} alt={p.part_name} loading="lazy" decoding="async" />
+                ) : (
+                  <div className="no-photo">ไม่มีรูป</div>
+                )}
+                <div className="gallery-caption">
+                  {p.part_name}
+                  {p.photo_urls?.length > 1 ? ` · 📷${p.photo_urls.length}` : ""}
+                </div>
+              </GalleryWrapper>
+            );
+          })}
         </div>
       )}
 
