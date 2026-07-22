@@ -200,20 +200,29 @@ function ShopInfoCard() {
   );
 }
 
+// การ์ด "Export CSV (Starter+)" — เดิมมีแค่ Parts เพราะตอนนั้น payment_method/cart flow ยังไม่มี
+// (ดูหมายเหตุใน app/api/parts/export-csv/route.js) — เพิ่ม Jobs/Sales ตาม field spec ที่การ์ด
+// ออกแบบไว้แล้ว (19 ก.ค. 2026) คืนนี้ — ใช้ endpoint คนละตัว ปุ่มคนละอันในการ์ดเดียวกัน
+const EXPORT_TARGETS = [
+  { key: "parts", label: "อะไหล่", endpoint: "/api/parts/export-csv", filenamePrefix: "parts-export" },
+  { key: "jobs", label: "งานซ่อม", endpoint: "/api/jobs/export-csv", filenamePrefix: "jobs-export" },
+  { key: "sales", label: "การขาย", endpoint: "/api/sales/export-csv", filenamePrefix: "sales-export" },
+];
+
 function ExportCsvCard() {
   const { currentShopId } = useAuth();
-  const [exporting, setExporting] = useState(false);
+  const [exportingKey, setExportingKey] = useState(null);
   const [msg, setMsg] = useState(null);
 
-  async function handleExport() {
-    setExporting(true);
+  async function handleExport(target) {
+    setExportingKey(target.key);
     setMsg(null);
     try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
-      const res = await fetch(`/api/parts/export-csv?shop_id=${currentShopId}`, {
+      const res = await fetch(`${target.endpoint}?shop_id=${currentShopId}`, {
         headers: { Authorization: `Bearer ${session?.access_token}` },
       });
 
@@ -226,7 +235,7 @@ function ExportCsvCard() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `parts-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `${target.filenamePrefix}-${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -234,7 +243,7 @@ function ExportCsvCard() {
     } catch (err) {
       setMsg({ type: "error", text: err.message });
     } finally {
-      setExporting(false);
+      setExportingKey(null);
     }
   }
 
@@ -243,13 +252,22 @@ function ExportCsvCard() {
       <div className="card-body" style={{ marginBottom: 10 }}>
         <div className="card-title">📤 Export CSV</div>
         <div className="card-sub">
-          ดาวน์โหลดรายการอะไหล่ทั้งหมดเป็นไฟล์ CSV (เปิดด้วย Excel ได้ ไม่มีปัญหาภาษาไทยเพี้ยน)
+          ดาวน์โหลดข้อมูลเป็นไฟล์ CSV (เปิดด้วย Excel ได้ ไม่มีปัญหาภาษาไทยเพี้ยน)
         </div>
       </div>
       {msg && <div className={`msg ${msg.type}`} style={{ marginBottom: 10 }}>{msg.text}</div>}
-      <button type="button" onClick={handleExport} disabled={exporting}>
-        {exporting ? "กำลังสร้างไฟล์..." : "📤 ดาวน์โหลด CSV (อะไหล่)"}
-      </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {EXPORT_TARGETS.map((target) => (
+          <button
+            key={target.key}
+            type="button"
+            onClick={() => handleExport(target)}
+            disabled={exportingKey !== null}
+          >
+            {exportingKey === target.key ? "กำลังสร้างไฟล์..." : `📤 ดาวน์โหลด CSV (${target.label})`}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

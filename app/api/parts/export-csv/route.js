@@ -38,6 +38,7 @@ const COLUMNS = [
   { key: "owner_type", header: "owner_type" },
   { key: "quantity", header: "quantity" },
   { key: "price", header: "price" },
+  { key: "allocated_cost", header: "allocated_cost" },
   { key: "created_at", header: "created_at" },
 ];
 
@@ -95,11 +96,17 @@ export async function GET(request) {
     const { data: parts, error: partsError } = await supabaseAdmin
       .from("parts")
       .select(
-        "id, part_name, part_number, car_brand, car_model, generation_id, trim_id, condition, source_type, status, zone_id, quantity, price, created_at"
+        "id, part_name, part_number, car_brand, car_model, generation_id, trim_id, condition, source_type, status, zone_id, quantity, price, allocated_cost, created_at"
       )
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false });
     if (partsError) throw partsError;
+
+    // การ์ด "Salvage vehicle cost allocation" เพิ่ม allocated_cost เข้ามาใหม่ (คนละคอลัมน์กับ
+    // price/ราคาขาย) — floor เดียวกับ "ราคาทุน" (cost_price field group) ตามที่การ์ด Export CSV
+    // ระบุไว้ว่า allocated_cost เป็น field ที่ต้องกรองตาม Field Visibility Whitelist — ต่างจาก
+    // price/ราคาขายที่ role ทุกตัวที่ export ได้ (Supervisor+) เห็นได้อยู่แล้วโดย default
+    const canSeeCostPrice = canSeeField(callerMember.role, "cost_price", overrides || []);
 
     const [{ data: zones }, { data: generations }, { data: trims }] = await Promise.all([
       supabaseAdmin.from("zones").select("id, parent_id, code, owner_type").eq("shop_id", shopId),
@@ -129,6 +136,7 @@ export async function GET(request) {
         owner_type: zone?.owner_type ?? null,
         quantity: p.quantity,
         price: p.price,
+        allocated_cost: canSeeCostPrice ? p.allocated_cost : null,
         created_at: p.created_at,
       };
     });
