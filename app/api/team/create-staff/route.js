@@ -8,6 +8,7 @@ import {
   normalizeUsername,
   usernameToStaffEmail,
 } from "../../../../lib/staffAuth";
+import { getTierConfig, isUnlimited } from "../../../../config/subscriptionTiers";
 
 export async function POST(request) {
   try {
@@ -62,21 +63,6 @@ export async function POST(request) {
     // แย่งที่นั่งพนักงานถาวรของแพ็กเกจ — เป็นการตีความของเราเอง ไม่ใช่มติที่การ์ดระบุตรงๆ)
     let shopForBurstCheck = null;
     if (isBurstModeAccount) {
-      const BURST_MODE_MAX_ACCOUNTS = 20; // fixed ทุก tier (ดูหมายเหตุใน db/onboarding_burst_mode_migration.sql)
-      const { count: burstCount, error: burstCountError } = await supabaseAdmin
-        .from("shop_members")
-        .select("member_id", { count: "exact", head: true })
-        .eq("shop_id", shopId)
-        .eq("role", "field_scanner")
-        .not("expires_at", "is", null)
-        .in("status", ["active", "invited"]);
-      if (burstCountError) throw burstCountError;
-      if ((burstCount || 0) >= BURST_MODE_MAX_ACCOUNTS) {
-        return NextResponse.json(
-          { error: `บัญชีชั่วคราว Burst Mode เต็มโควตาแล้ว (สูงสุด ${BURST_MODE_MAX_ACCOUNTS} บัญชี)` },
-          { status: 400 }
-        );
-      }
       const { data: shopRow, error: shopError } = await supabaseAdmin
         .from("shops")
         .select("subscription_plan")
@@ -84,6 +70,29 @@ export async function POST(request) {
         .single();
       if (shopError) throw shopError;
       shopForBurstCheck = shopRow;
+
+      // การ์ด "Onboarding Burst Mode" ✅ ตัดสินใจแล้ว (21 ก.ค. 2026): "20 บัญชี fix ทุก tier
+      // ยกเว้น Enterprise ที่ configurable" — ย้ายมาอ่านจาก config/subscriptionTiers.js แทน
+      // hardcode ในไฟล์นี้ตรงๆ (แก้ 22 ก.ค. 2026 — ของเดิม fix 20 ทุก tier ไม่เว้น Enterprise
+      // เพราะตอนเขียนไฟล์นี้ครั้งแรก มติ Enterprise-configurable ยังไม่ถูกเคาะ)
+      const burstModeMaxAccounts = getTierConfig(shopForBurstCheck?.subscription_plan)
+        .burstModeMaxAccounts;
+      if (!isUnlimited(burstModeMaxAccounts)) {
+        const { count: burstCount, error: burstCountError } = await supabaseAdmin
+          .from("shop_members")
+          .select("member_id", { count: "exact", head: true })
+          .eq("shop_id", shopId)
+          .eq("role", "field_scanner")
+          .not("expires_at", "is", null)
+          .in("status", ["active", "invited"]);
+        if (burstCountError) throw burstCountError;
+        if ((burstCount || 0) >= burstModeMaxAccounts) {
+          return NextResponse.json(
+            { error: `บัญชีชั่วคราว Burst Mode เต็มโควตาแล้ว (สูงสุด ${burstModeMaxAccounts} บัญชี)` },
+            { status: 400 }
+          );
+        }
+      }
     } else {
       const seatCheck = await checkSeatLimit(shopId);
       if (!seatCheck.ok) {

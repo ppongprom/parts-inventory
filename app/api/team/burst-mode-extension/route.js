@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../lib/supabaseAdminClient";
 import { verifyCaller } from "../../../../lib/teamAuth";
+import { requirePlatformRole, logPlatformAction } from "../../../../lib/platformAdmin";
 
 // Card: "Onboarding Burst Mode — Requester/Approver workflow"
 // action "request": Manager (Requester) ขอต่ออายุบัญชี field_scanner ชั่วคราว (Burst Mode)
 // action "respond": Owner (Approver) อนุมัติ/ปฏิเสธ — Manager approve คำขอตัวเองไม่ได้เด็ดขาด
 // (ต้องเป็นคนละ role กันเสมอ — บังคับด้วย role check ตรงๆ ในนี้ ไม่ใช้แค่ RLS "owner/manager"
 // รวมกันเพราะ RLS แยกสองฝั่งนี้ไม่ได้)
+//
+// ✅ เพิ่ม 22 ก.ค. 2026 (ตามมติการ์ด 21 ก.ค. 2026 — "Owner ไม่ตอบจนหมดเขต: Platform Admin กด
+// ต่อแทนได้ — แต่ใช้สิทธิ์ 'ต่อได้ 1 รอบ' เดียวกับที่ Owner มี ไม่ใช่สิทธิ์เพิ่มพิเศษ + ต้องลง
+// Platform admin audit log ระบุชัดว่า admin เป็นผู้กดแทน"): action "respond" ยอมรับทั้ง Owner
+// ของอู่นั้น **หรือ** Platform Admin (super_admin/support — เหมือนเงื่อนไข join-as-support ไม่ใช่
+// analyst เพราะ analyst read-only ล้วน) — จึงย้าย callerMembership lookup ให้ทำแบบ optional
+// (ไม่ reject ทันทีถ้าไม่ใช่ shop member เพราะ platform admin ไม่ใช่ shop member ของอู่ลูกค้าเลย)
 export async function POST(request) {
   try {
     const authResult = await verifyCaller(request);
@@ -26,7 +34,7 @@ export async function POST(request) {
       .eq("status", "active")
       .maybeSingle();
 
-    if (!callerMembership) {
+    if (action === "request" && !callerMembership) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์จัดการอู่นี้" }, { status: 403 });
     }
 
@@ -73,9 +81,21 @@ export async function POST(request) {
 
     if (action === "respond") {
       // เฉพาะ Owner เท่านั้นที่เป็น Approver ได้ — กัน Manager approve คำขอตัวเอง (ตรงตาม test
-      // scenario ของการ์ด: "Manager approve คำขอตัวเอง -> reject")
-      if (callerMembership.role !== "owner") {
-        return NextResponse.json({ error: "เฉพาะเจ้าของอู่ (Owner) เท่านั้นที่อนุมัติ/ปฏิเสธได้" }, { status: 403 });
+      // scenario ของการ์ด: "Manager approve คำขอตัวเอง -> reject") — หรือ Platform Admin กดแทนได้
+      // (มติ 21 ก.ค. 2026) ถ้า Owner ไม่ตอบจนหมดเขต
+      const isOwner = callerMembership?.role === "owner";
+      let isPlatformAdminOverride = false;
+      if (!isOwner) {
+        const platformCheck = await requirePlatformRole(request, ["super_admin", "support"]);
+        if (!platformCheck.error) {
+          isPlatformAdminOverride = true;
+        }
+      }
+      if (!isOwner && !isPlatformAdminOverride) {
+        return NextResponse.json(
+          { error: "เฉพาะเจ้าของอู่ (Owner) หรือ Platform Admin เท่านั้นที่อนุมัติ/ปฏิเสธได้" },
+          { status: 403 }
+        );
       }
       if (!["approved", "rejected"].includes(decision)) {
         return NextResponse.json({ error: "decision ต้องเป็น approved หรือ rejected" }, { status: 400 });
@@ -121,7 +141,20 @@ export async function POST(request) {
         if (extendError) throw extendError;
       }
 
-      return NextResponse.json({ data: { status: decision } });
+      if (isPlatformAdminOverride) {
+        // ต้องลง Platform admin audit log ระบุชัดว่า admin เป็นผู้กดแทน ไม่ใช่ Owner กดเอง (มติการ์ด)
+        await logPlatformAction({
+          adminUserId: userId,
+          adminRole: "platform_admin_override",
+          action: "burst_mode_extension_override",
+          status: "success",
+          targetShopId: shopId,
+          targetUserId: null,
+          newData: { request_id: requestId, member_id: reqRow.member_id, decision },
+        });
+      }
+
+      return NextResponse.json({ data: { status: decision, approved_by_platform_admin: isPlatformAdminOverride } });
     }
 
     return NextResponse.json({ error: "action ไม่ถูกต้อง" }, { status: 400 });

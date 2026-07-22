@@ -15,6 +15,13 @@
  *                 (fn_tier_stock_cap) ด้วย เพราะ trigger ฝั่ง DB ต้องรู้ cap ทันทีตอนแก้ parts
  *                 โดยไม่พึ่งแอปเรียก RPC แยก — แก้ที่นี่แล้วต้องไปแก้ SQL function ให้ตรงกันด้วย
  *                 (ดูหมายเหตุเต็มในไฟล์ migration ว่าทำไมถึงต้องมี 2 ที่)
+ * burstModeMaxAccounts = การ์ด "Onboarding Burst Mode" — จำนวนบัญชี field_scanner ชั่วคราว
+ *                 (Burst Mode) สูงสุดต่ออู่ ไม่ผูกกับ maxMembers ปกติ — ✅ ตัดสินใจแล้วในการ์ด
+ *                 (21 ก.ค. 2026): "20 บัญชี fix ทุก tier ยกเว้น Enterprise ที่ configurable" —
+ *                 null = configurable/เจรจาต่อรายอู่ (ตาม convention เดียวกับ maxMembers/
+ *                 maxConcurrentSessions ของ Enterprise ในไฟล์นี้ — ไม่มี UI ตั้งค่าต่อร้านแยกต่างหาก
+ *                 ตอนนี้ ถ้าต้องการค่าที่ตั้งได้จริงต้องเพิ่มคอลัมน์ shops.burst_mode_max_accounts
+ *                 override ในอนาคต — เพิ่มเมื่อมีลูกค้า Enterprise จริงที่ต้องการปรับ)
  */
 
 export const GLOBAL_SESSION_CONFIG = {
@@ -36,6 +43,7 @@ export const SUBSCRIPTION_TIERS = {
     maxConcurrentSessions: 3,
     stockValueCap: 500000,
     maxParts: 50,
+    burstModeMaxAccounts: 20,
     trialDays: 14,
     features: ["core_crud", "search", "mobile_camera"],
   },
@@ -47,6 +55,7 @@ export const SUBSCRIPTION_TIERS = {
     maxConcurrentSessions: 5,
     stockValueCap: 1000000,
     maxParts: null, // ไม่จำกัด
+    burstModeMaxAccounts: 20,
     features: ["core_crud", "search", "mobile_camera", "admin_basic"],
   },
   founder: {
@@ -57,6 +66,7 @@ export const SUBSCRIPTION_TIERS = {
     maxConcurrentSessions: 8,
     stockValueCap: 3000000,
     maxParts: null,
+    burstModeMaxAccounts: 20,
     features: [
       "core_crud",
       "search",
@@ -75,6 +85,7 @@ export const SUBSCRIPTION_TIERS = {
     maxConcurrentSessions: 12,
     stockValueCap: 10000000,
     maxParts: null,
+    burstModeMaxAccounts: 20,
     features: [
       "core_crud",
       "search",
@@ -95,6 +106,7 @@ export const SUBSCRIPTION_TIERS = {
     maxConcurrentSessions: null,
     stockValueCap: null,
     maxParts: null,
+    burstModeMaxAccounts: null, // configurable/เจรจาต่อรายอู่ (ดูหมายเหตุด้านบน)
     features: ["all", "multi_branch", "api_access", "custom_reports"],
   },
 };
