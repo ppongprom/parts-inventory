@@ -63,6 +63,12 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
       });
 
       const { data, error } = await queryBuilder
+        // เรียงตาม brand → model → generation ก่อน เพื่อให้ trim ของรุ่นเดียวกัน
+        // อยู่ติดกันเป็นกลุ่มเสมอ (เดิมเรียงแค่ trim_id ซึ่งเป็นลำดับการเพิ่มข้อมูล
+        // ดิบๆ ทำให้ trim ของรุ่นเดียวกันกระจายไปมาไม่เป็นกลุ่มถ้า trim_id ห่างกันมาก)
+        .order("brand_name", { ascending: true })
+        .order("model_name", { ascending: true })
+        .order("generation_id", { ascending: true })
         .order("trim_id", { ascending: true, nullsFirst: true })
         .limit(15);
 
