@@ -114,6 +114,14 @@ create trigger trg_allocate_salvage_part_cost
   before insert or update on parts
   for each row execute function fn_allocate_salvage_part_cost();
 
+-- พบระหว่างรัน get_advisors หลัง apply migration นี้ (22 ก.ค. 2026): ฟังก์ชัน trigger นี้ (ตั้งใจให้
+-- เรียกผ่าน trigger เท่านั้น ไม่ใช่ RPC ตรง) ถูก PostgREST เปิดเป็น RPC endpoint ให้ anon/authenticated
+-- เรียกตรงได้โดยไม่ได้ตั้งใจ (ค่า default ของ Postgres คือ grant execute ให้ PUBLIC เสมอ ยกเว้นจะ
+-- revoke เอง) — revoke ทิ้งเพราะไม่มีประโยชน์ให้เรียกตรงเลย (NEW/OLD/TG_OP ไม่มีค่านอก trigger
+-- context จะ error อย่างเดียว) และลดพื้นที่โจมตีที่ไม่จำเป็นออก — ไม่กระทบการทำงานของ trigger เอง
+-- เพราะ trigger invocation เกิดที่ระดับ DB engine ตรงๆ ไม่ผ่าน PostgREST/grant ชุดนี้
+revoke execute on function fn_allocate_salvage_part_cost() from public, anon, authenticated;
+
 -- 4) Freeze estimated_total_value/value_groups ตั้งแต่เริ่มถอด (status เข้า disassembling เป็นต้นไป)
 --    แก้ purchase_price/chassis_number/photo_urls/notes ฯลฯ ยังทำได้ปกติ — freeze เฉพาะ 2 คอลัมน์
 --    ที่ใช้เป็นตัวหารคำนวณสัดส่วนเท่านั้น (ตามมติการ์ด)
