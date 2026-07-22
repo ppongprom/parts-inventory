@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ------------------------------------------------------------
-// ลบ test data ที่ setup-test-data.mjs สร้างไว้ทั้งหมด
+// ลบ test data ที่ setup-test-data.mjs สร้างไว้ทั้งหมด (10 shop: 5 worker + 5 tier)
 // รันหลังจบรอบทดสอบทุกครั้ง โดยเฉพาะแถวใน platform_admins ที่ต้องลบก่อนเสมอ
 //
 // ⚠️ ลำดับสำคัญ: shops.owner_user_id เป็น FK -> auth.users(id) แบบไม่มี
@@ -19,9 +19,39 @@ const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-const TEST_EMAILS = [
-  process.env.TEST_OWNER_EMAIL,
-  process.env.TEST_MANAGER_EMAIL,
+const STAFF_EMAIL_DOMAIN = "staff.internal.partsinventory.app";
+const toStaffEmail = (u) => `${u.toLowerCase()}@${STAFF_EMAIL_DOMAIN}`;
+
+// ---- worker shops 1-5 ----
+const WORKER_EMAILS = [];
+const WORKER_STAFF_USERNAMES = [];
+for (let i = 1; i <= 5; i++) {
+  const suffix = i === 1 ? "" : `_S${i}`;
+  WORKER_EMAILS.push(process.env[`TEST_OWNER_EMAIL${suffix}`], process.env[`TEST_MANAGER_EMAIL${suffix}`]);
+  WORKER_STAFF_USERNAMES.push(
+    process.env[`TEST_SUPERVISOR_USERNAME${suffix}`],
+    process.env[`TEST_TECHNICIAN_USERNAME${suffix}`],
+    process.env[`TEST_ASSISTANT_USERNAME${suffix}`],
+    process.env[`TEST_FIELDSCANNER_USERNAME${suffix}`],
+    process.env[`TEST_FIELDSCANNER_EXPIRED_USERNAME${suffix}`]
+  );
+}
+
+// ---- tier shops (trial/starter/founder/pro/enterprise) ----
+const TIER_ORDER = ["trial", "starter", "founder", "pro", "enterprise"];
+const TIER_EMAILS = [];
+const TIER_STAFF_USERNAMES = [];
+for (const tier of TIER_ORDER) {
+  const prefix = `TEST_TIER_${tier.toUpperCase()}`;
+  TIER_EMAILS.push(process.env[`${prefix}_OWNER_EMAIL`]);
+  for (let i = 1; i <= 15; i++) {
+    const u = process.env[`${prefix}_STAFF${i}_USERNAME`];
+    if (u) TIER_STAFF_USERNAMES.push(u);
+  }
+}
+
+// ---- special one-off accounts (ไม่เปลี่ยนจากเดิม) ----
+const SPECIAL_EMAILS = [
   process.env.TEST_OWNER_PLATFORMADMIN_EMAIL,
   process.env.TEST_DISABLED_OWNER_EMAIL,
   process.env.TEST_NEWUSER_EMAIL,
@@ -29,21 +59,14 @@ const TEST_EMAILS = [
   process.env.TEST_CONCURRENT2_EMAIL,
   process.env.TEST_CONCURRENT3_EMAIL,
   process.env.TEST_CONCURRENT4_EMAIL,
-].filter(Boolean);
+];
 
-const STAFF_USERNAMES = [
-  process.env.TEST_SUPERVISOR_USERNAME,
-  process.env.TEST_TECHNICIAN_USERNAME,
-  process.env.TEST_ASSISTANT_USERNAME,
-  process.env.TEST_FIELDSCANNER_USERNAME, // คืนวันที่ 21 ก.ค. 2026
-  process.env.TEST_FIELDSCANNER_EXPIRED_USERNAME,
-].filter(Boolean);
-
-const STAFF_EMAIL_DOMAIN = "staff.internal.partsinventory.app";
-const STAFF_EMAILS = STAFF_USERNAMES.map((u) => `${u.toLowerCase()}@${STAFF_EMAIL_DOMAIN}`);
+const TEST_EMAILS = [...WORKER_EMAILS, ...TIER_EMAILS, ...SPECIAL_EMAILS].filter(Boolean);
+const STAFF_USERNAMES = [...WORKER_STAFF_USERNAMES, ...TIER_STAFF_USERNAMES].filter(Boolean);
+const STAFF_EMAILS = STAFF_USERNAMES.map(toStaffEmail);
 
 async function findUserByEmail(email) {
-  const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
+  const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 500 });
   if (error) throw error;
   return data.users.find((u) => u.email === email);
 }
@@ -55,18 +78,10 @@ async function deleteUserEverywhere(email) {
     return;
   }
 
-  // 1) ลบออกจาก platform_admins ก่อนเสมอ (สำคัญที่สุด — ห้ามตกค้าง)
   await supabaseAdmin.from("platform_admins").delete().eq("user_id", user.id);
-
-  // 2) ลบ shop_members ที่ผูกกับ user นี้
   await supabaseAdmin.from("shop_members").delete().eq("user_id", user.id);
-
-  // 2.5) ลบ user_sessions ที่ผูกกับ user นี้ (TC-302) — user_sessions.user_id ก็ไม่มี
-  //      ON DELETE CASCADE เหมือนกัน (ดู db/fresh_project_full_schema.sql) ต้องลบก่อนเสมอ
   await supabaseAdmin.from("user_sessions").delete().eq("user_id", user.id);
 
-  // 3) ลบ auth user (ต้องรันหลังจากลบ shops ที่ owner_user_id ชี้มาที่ user นี้แล้วเท่านั้น
-  //    ดู deleteTestShops() ที่ต้องเรียกก่อนฟังก์ชันนี้ใน main())
   const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(user.id);
   if (delErr) {
     console.warn(
@@ -80,20 +95,21 @@ async function deleteUserEverywhere(email) {
 }
 
 const TEST_SHOP_NAMES = [
+  // worker shops
   "QA Test Shop (auto)",
+  "QA Test Shop (auto) - Worker 2",
+  "QA Test Shop (auto) - Worker 3",
+  "QA Test Shop (auto) - Worker 4",
+  "QA Test Shop (auto) - Worker 5",
+  // tier shops
+  ...TIER_ORDER.map((t) => `QA Tier Shop - ${t}`),
+  // special
   "QA Test Shop B (multi-shop, auto)",
   "QA Platform-Admin Owner Shop (auto)",
   "QA Disabled Shop (auto)",
   "QA Concurrent-Session Shop (auto)",
 ];
 
-// ตารางที่ผูกกับ shop_id แบบไม่มี ON DELETE CASCADE (เหมือนกับ parts/zones/customers/jobs เดิม —
-// ดูคอมเมนต์เรื่องนี้ใน db/*.sql หลายไฟล์) เพิ่ม 2 ตารางใหม่คืนวันที่ 21 ก.ค. 2026
-// (shop_tos_acceptances, salvage_vehicles) เข้าไปด้วย ไม่งั้น DELETE shops จะชน FK violation
-// ทันทีที่ suite ไหนเคยรันผ่าน tests/card-tos-consent.spec.js หรือ card-salvage-vehicle-intake.spec.js
-// มาก่อน — ลบตามลำดับที่ปลอดภัย (ลูกก่อนแม่) แบบ best-effort ทุกตัวห่อ try/catch เอง เพราะ
-// ตารางบางตัวอาจไม่มีแถวอยู่แล้ว หรือ FK ระหว่างกันเองอาจต่างจากที่คาดไว้ — ไม่ให้ทั้ง script ล้ม
-// เพราะ 1 ตาราง ตามธรรมเนียมเดิมของไฟล์นี้ (warn แล้วไปต่อ)
 async function wipeShopChildRows(shopId, shopName) {
   const CHILD_TABLES_IN_ORDER = [
     "job_workflow_steps",
@@ -119,7 +135,6 @@ async function wipeShopChildRows(shopId, shopName) {
   }
 }
 
-/** ต้องลบก่อนลบ auth user เสมอ เพราะ shops.owner_user_id ไม่มี ON DELETE CASCADE */
 async function deleteTestShops() {
   for (const shopName of TEST_SHOP_NAMES) {
     const { data: shopRow } = await supabaseAdmin
@@ -139,9 +154,10 @@ async function deleteTestShops() {
 }
 
 async function main() {
-  console.log("== Teardown test data: parts-inventory staging ==\n");
+  console.log("== Teardown test data: parts-inventory staging (multi-shop) ==\n");
+  console.log(`(รวม ${TEST_EMAILS.length} email accounts + ${STAFF_EMAILS.length} staff accounts ที่จะลบ)\n`);
 
-  console.log("[0/2] ลบ visibility_groups ทดสอบ (ถ้ามี — ห่อ try/catch เพราะตารางอาจไม่มีจริง)");
+  console.log("[0/2] ลบ visibility_groups ทดสอบ (ถ้ามี)");
   try {
     await supabaseAdmin.from("visibility_groups").delete().eq("name", "QA Test Group A");
     console.log("  🗑️  ลบ 'QA Test Group A' เรียบร้อย (ถ้ามีอยู่)");

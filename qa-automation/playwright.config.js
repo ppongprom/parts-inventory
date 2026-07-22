@@ -16,9 +16,14 @@ export default defineConfig({
   testDir: "./tests",
   timeout: 30_000,
   expect: { timeout: 8_000 },
-  fullyParallel: false, // ปิด parallel เพราะหลาย test แชร์ shop/staff account เดียวกัน อาจชน state กัน
+  // เปิด parallel แล้ว (22 ก.ค. 2026) — เดิมปิดไว้เพราะทุก test แชร์ shop/staff account เดียวกัน
+  // ตอนนี้แก้แล้วด้วย multi-shop: fixtures/test-data.js resolve credential ตาม
+  // process.env.TEST_PARALLEL_INDEX (Playwright set ให้อัตโนมัติต่อ worker) แต่ละ worker
+  // จึงได้ shop ของตัวเอง 1 ใน 5 ชุด ไม่ชน state กันอีกต่อไป (ดู scripts/setup-test-data.mjs
+  // -> setupWorkerShop สำหรับที่มาของ 5 shop นี้)
+  fullyParallel: true,
   retries: process.env.CI ? 1 : 0,
-  workers: 1,
+  workers: 5,
   reporter: [
     ["list"],
     ["json", { outputFile: "test-results/results.json" }],
