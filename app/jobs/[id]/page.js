@@ -9,6 +9,7 @@ import RequireAuth from "../../../components/RequireAuth";
 import { JOB_STATUSES, JOB_STATUS_STYLE, JOB_SOURCE_TYPES } from "../../../lib/jobStatusLabels";
 import CarDamageDiagram from "../../../components/CarDamageDiagram";
 import JobTypeBundleConfirmModal from "../../../components/JobTypeBundleConfirmModal";
+import CarAutocomplete from "../../../components/CarAutocomplete";
 
 const ROLE_LABELS = {
   owner: "เจ้าของ",
@@ -56,6 +57,7 @@ function JobDetailPageContent() {
   const [creatingDoc, setCreatingDoc] = useState(null);
   const [msg, setMsg] = useState(null);
   const [lightboxIndex, setLightboxIndex] = useState(null);
+  const [selectedGeneration, setSelectedGeneration] = useState(null);
   const touchStartXRef = useRef(null);
 
   const [groups, setGroups] = useState([]);
@@ -707,6 +709,33 @@ function JobDetailPageContent() {
       setMsg({ type: "error", text: "โหลดข้อมูลไม่สำเร็จ: " + error.message });
     } else {
       setJob(data);
+      if (data.car_year_display) {
+        let trimName = null;
+        if (data.trim_id) {
+          const { data: trimRow } = await supabase
+            .from("model_trims")
+            .select("trim_name")
+            .eq("trim_id", data.trim_id)
+            .maybeSingle();
+          trimName = trimRow?.trim_name || null;
+        }
+        let generationCode = null;
+        if (data.generation_id) {
+          const { data: genRow } = await supabase
+            .from("model_generations")
+            .select("generation_code")
+            .eq("generation_id", data.generation_id)
+            .maybeSingle();
+          generationCode = genRow?.generation_code || null;
+        }
+        setSelectedGeneration({
+          generation_id: data.generation_id,
+          year_range_display: data.car_year_display,
+          generation_code: generationCode,
+          trim_id: data.trim_id || null,
+          trim_name: trimName,
+        });
+      }
     }
     setLoading(false);
   }
@@ -739,6 +768,9 @@ function JobDetailPageContent() {
         customer_address: job.customer_address,
         car_brand: job.car_brand,
         car_model: job.car_model,
+        car_year_display: selectedGeneration?.year_range_display || null,
+        generation_id: selectedGeneration?.generation_id || null,
+        trim_id: selectedGeneration?.trim_id || null,
         license_plate: job.license_plate,
         source_type: job.source_type,
         status: job.status,
@@ -1012,33 +1044,42 @@ function JobDetailPageContent() {
           <input type="text" name="license_plate" value={job.license_plate || ""} onChange={handleChange} />
         </label>
 
-        <label>
-          ยี่ห้อรถ
-          <input type="text" name="car_brand" value={job.car_brand || ""} onChange={handleChange} />
-        </label>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 6 }}>
+          🔍 ค้นหารถ (ยี่ห้อ/รุ่น) — พิมพ์แล้วเลือกเฉพาะเมื่อต้องการเปลี่ยนรถของงานนี้
+          <CarAutocomplete
+            onSelect={(item) => {
+              setJob((j) => ({
+                ...j,
+                car_brand: item?.brand_name || "",
+                car_model: item?.model_name || "",
+              }));
+              setSelectedGeneration(item);
+            }}
+          />
+        </div>
 
         <label>
-          รุ่นรถ
-          <input type="text" name="car_model" value={job.car_model || ""} onChange={handleChange} />
+          ยี่ห้อ รุ่น ปีผลิต ของรถ
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 8,
+              border: "1px solid var(--border-strong)",
+              background: "var(--surface-dim)",
+              fontSize: 14,
+            }}
+          >
+            {job.car_brand || job.car_model
+              ? `${job.car_brand || ""} ${job.car_model || ""}${
+                  selectedGeneration?.year_range_display ? ` · ${selectedGeneration.year_range_display}` : ""
+                }${
+                  selectedGeneration?.generation_code ? ` (${selectedGeneration.generation_code})` : ""
+                }${
+                  selectedGeneration?.trim_name ? ` · รุ่นย่อย: ${selectedGeneration.trim_name}` : ""
+                }`.trim()
+              : "— ยังไม่มีข้อมูลรถ — ค้นหาด้านบนเพื่อเลือก —"}
+          </div>
         </label>
-
-        {job.car_year_display && (
-          <label>
-            ปีที่ผลิต
-            <div
-              style={{
-                padding: 12,
-                borderRadius: 8,
-                border: "1px solid var(--border-strong)",
-                background: "var(--surface-dim)",
-                color: "var(--text)",
-                fontSize: 14,
-              }}
-            >
-              {job.car_year_display}
-            </div>
-          </label>
-        )}
 
         <label>
           ที่มา
