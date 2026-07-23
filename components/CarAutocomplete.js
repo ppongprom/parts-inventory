@@ -40,37 +40,12 @@ export default function CarAutocomplete({ onSelect, placeholder }) {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
 
-      const tokens = q.split(/\s+/).filter(Boolean);
-      let queryBuilder = supabase.from("car_search_display").select("*");
-
-      // แต่ละคำต้อง match กับ brand/model/generation_code/trim_name อย่างน้อย 1 column
-      // (การเรียก .or() หลายครั้งจะ AND กันเอง ทำให้ "byd atto" หาเจอได้
-      //  แม้ยี่ห้อกับรุ่นจะอยู่คนละ column กัน)
-      tokens.forEach((token) => {
-        // token ที่เป็นตัวเลขล้วนสั้นๆ (1-3 หลัก) ไม่ match กับ generation_code
-        // เพราะ generation_code มักเก็บช่วงปี (เช่น "1996-ปัจจุบัน") ทำให้ token
-        // อย่าง "1" หรือ "2" ไป match ปีของรุ่นอื่นโดยบังเอิญแทบทุกรุ่น แล้วดัน
-        // ผลลัพธ์ที่ผู้ใช้ต้องการ (เช่น "1-Series") ตกขอบ LIMIT ไป
-        // ยังคง match generation_code ตามปกติถ้า token มีตัวอักษรปน (เช่น "F20", "GJ")
-        const isShortNumericToken = /^\d{1,3}$/.test(token);
-        queryBuilder = isShortNumericToken
-          ? queryBuilder.or(
-              `brand_name.ilike.%${token}%,model_name.ilike.%${token}%,trim_name.ilike.%${token}%`
-            )
-          : queryBuilder.or(
-              `brand_name.ilike.%${token}%,model_name.ilike.%${token}%,generation_code.ilike.%${token}%,trim_name.ilike.%${token}%`
-            );
-      });
-
-      const { data, error } = await queryBuilder
-        // เรียงตาม brand → model → generation ก่อน เพื่อให้ trim ของรุ่นเดียวกัน
-        // อยู่ติดกันเป็นกลุ่มเสมอ (เดิมเรียงแค่ trim_id ซึ่งเป็นลำดับการเพิ่มข้อมูล
-        // ดิบๆ ทำให้ trim ของรุ่นเดียวกันกระจายไปมาไม่เป็นกลุ่มถ้า trim_id ห่างกันมาก)
-        .order("brand_name", { ascending: true })
-        .order("model_name", { ascending: true })
-        .order("generation_id", { ascending: true })
-        .order("trim_id", { ascending: true, nullsFirst: true })
-        .limit(15);
+      // ค้นผ่าน RPC search_cars() แทนอ่าน view car_search_display ตรงๆ — view ตัวนี้ไม่ grant
+      // SELECT ให้ authenticated/anon เลย (ตั้งใจ กัน Supabase Security Advisor เตือนเรื่อง
+      // view/table เปิดสาธารณะโดยไม่มี RLS) ฟังก์ชันนี้เป็น SECURITY DEFINER ที่อ่านแทนให้ ทำ
+      // token-matching logic เดียวกันทุกประการฝั่ง DB แล้ว (ดู
+      // db/car_search_display_rpc_migration.sql) เรียงผลลัพธ์มาให้พร้อมแล้วด้วย
+      const { data, error } = await supabase.rpc("search_cars", { p_query: q });
 
       if (!error) setResults(data || []);
       setLoading(false);
