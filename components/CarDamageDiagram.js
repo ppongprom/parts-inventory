@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTheme } from "../lib/ThemeProvider";
 
 // ประเภทรถที่มีชุดภาพให้เลือก — เพิ่มได้เรื่อยๆ ทีหลังแค่เติมชุดรูปใหม่ที่นี่
 const CAR_TYPES = [
@@ -39,6 +40,7 @@ export default function CarDamageDiagram({
   carType: carTypeProp,
   onCarTypeChange,
 }) {
+  const { theme } = useTheme();
   const [localCarType, setLocalCarType] = useState(carTypeProp || "sedan");
   const carType = carTypeProp ?? localCarType;
 
@@ -148,11 +150,18 @@ export default function CarDamageDiagram({
                 borderRadius: 8,
                 overflow: "hidden",
                 cursor: readOnly ? "default" : "crosshair",
-                background: "white",
+                background: theme === "dark" ? "black" : "white",
               }}
             >
+              {/* รูปเป็นเส้นขาว-ดำล้วน (พื้นขาว เส้นดำ) — ตอน dark theme invert สีทั้งภาพ
+                  ได้พื้นดำเส้นขาวพอดี ไม่ต้องสร้างไฟล์รูปแยกชุดที่ 2 */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={v.image} alt={v.label} style={{ width: "100%", display: "block" }} draggable={false} />
+              <img
+                src={v.image}
+                alt={v.label}
+                style={{ width: "100%", display: "block", filter: theme === "dark" ? "invert(1)" : "none" }}
+                draggable={false}
+              />
               {normalizedPoints
                 .filter((p) => p.view === v.key)
                 .map((p, i) => (
