@@ -112,20 +112,53 @@ function JobTypeBundlesPageContent() {
     else loadTemplates();
   }
 
-  async function handleUpdateItemAmount(itemId, amount) {
-    await supabase
-      .from("job_type_bundle_items")
-      .update({ default_amount: amount !== "" ? Number(amount) : null })
-      .eq("item_id", itemId);
-    loadTemplates();
+  // แก้ไขรายการหลัก (ชื่อ/รายละเอียด/ปริมาณ/ราคา) — บันทึกทันทีตอนออกจากช่อง (onBlur) เหมือนของเดิม
+  async function handleUpdateItemField(itemId, patch) {
+    const { error: updateError } = await supabase.from("job_type_bundle_items").update(patch).eq("item_id", itemId);
+    if (updateError) setError(updateError.message);
+    else loadTemplates();
   }
 
-  async function handleUpdateItemQuantity(itemId, quantity) {
-    await supabase
-      .from("job_type_bundle_items")
-      .update({ default_quantity: quantity !== "" ? Number(quantity) : 1 })
-      .eq("item_id", itemId);
-    loadTemplates();
+  // เพิ่มรายการใหม่เข้าเซตที่มีอยู่แล้ว — เดิมทำได้แค่ตอนสร้างเซตใหม่ทั้งดวงผ่าน modal เท่านั้น
+  async function handleAddItem(template) {
+    const nextSort = (template.job_type_bundle_items || []).length;
+    const { error: insertError } = await supabase.from("job_type_bundle_items").insert({
+      template_id: template.template_id,
+      category: "parts",
+      item_group_label: "รายการใหม่",
+      description: "รายละเอียดใหม่",
+      default_quantity: 1,
+      is_price_locked: true,
+      sort_order: nextSort,
+    });
+    if (insertError) setError(insertError.message);
+    else loadTemplates();
+  }
+
+  // แก้ไข sub-variant — เดิมหน้านี้แสดงแค่ "(N sub-variant)" เป็นข้อความ แก้ไขอะไรไม่ได้เลย
+  async function handleUpdateVariantField(variantId, patch) {
+    const { error: updateError } = await supabase.from("job_type_bundle_item_variants").update(patch).eq("variant_id", variantId);
+    if (updateError) setError(updateError.message);
+    else loadTemplates();
+  }
+
+  async function handleAddVariant(item) {
+    const nextSort = (item.job_type_bundle_item_variants || []).length;
+    const { error: insertError } = await supabase.from("job_type_bundle_item_variants").insert({
+      item_id: item.item_id,
+      variant_label: "ตัวเลือกใหม่",
+      description: "รายละเอียดใหม่",
+      default_quantity: 1,
+      sort_order: nextSort,
+    });
+    if (insertError) setError(insertError.message);
+    else loadTemplates();
+  }
+
+  async function handleDeleteVariant(variantId) {
+    const { error: deleteError } = await supabase.from("job_type_bundle_item_variants").delete().eq("variant_id", variantId);
+    if (deleteError) setError(deleteError.message);
+    else loadTemplates();
   }
 
   return (
@@ -169,39 +202,153 @@ function JobTypeBundlesPageContent() {
 
             {expandedId === t.template_id && (
               <div style={{ marginTop: 10 }}>
-                {(t.job_type_bundle_items || []).map((item) => (
-                  <div key={item.item_id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, marginBottom: 6 }}>
-                    <span style={{ width: 60, color: "var(--text-muted)" }}>{CATEGORY_LABELS[item.category]}</span>
-                    <span style={{ flex: 1 }}>
-                      {item.item_group_label} — {item.description}
-                      {(item.job_type_bundle_item_variants || []).length > 0 &&
-                        ` (${item.job_type_bundle_item_variants.length} sub-variant)`}
-                    </span>
-                    <input
-                      type="number"
-                      defaultValue={item.default_quantity ?? 1}
-                      onBlur={(e) => handleUpdateItemQuantity(item.item_id, e.target.value)}
-                      title="ปริมาณ"
-                      min="0.01"
-                      step="any"
-                      style={{ width: 60 }}
-                    />
-                    <input
-                      type="number"
-                      defaultValue={item.default_amount ?? ""}
-                      onBlur={(e) => handleUpdateItemAmount(item.item_id, e.target.value)}
-                      title="ราคาต่อหน่วย"
-                      style={{ width: 80 }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteItem(item.item_id)}
-                      style={{ border: "none", background: "transparent", color: "var(--danger-text)", cursor: "pointer" }}
+                {(t.job_type_bundle_items || []).map((item) => {
+                  const variants = item.job_type_bundle_item_variants || [];
+                  const hasVariants = variants.length > 0;
+                  return (
+                    <div
+                      key={item.item_id}
+                      style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 8, marginBottom: 8 }}
                     >
-                      ✕
-                    </button>
-                  </div>
-                ))}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, flexWrap: "wrap" }}>
+                        <select
+                          value={item.category}
+                          onChange={(e) => handleUpdateItemField(item.item_id, { category: e.target.value })}
+                          style={{ width: 90 }}
+                        >
+                          {Object.entries(CATEGORY_LABELS).map(([k, label]) => (
+                            <option key={k} value={k}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          defaultValue={item.item_group_label}
+                          onBlur={(e) => handleUpdateItemField(item.item_id, { item_group_label: e.target.value })}
+                          placeholder="ชื่อรายการ"
+                          style={{ width: 140 }}
+                        />
+                        {/* ราคา/รายละเอียด default ของรายการหลัก ไม่ถูกใช้อีกต่อไปตอนมี sub-variant
+                            แล้ว (ดู handleApplyBundle ใน app/jobs/[id]/page.js — เลือกจาก variant
+                            เสมอถ้ามี) ซ่อนไปเลยกันสับสนว่าทำไมกรอกราคาไว้แล้วไม่ถูกใช้ */}
+                        {!hasVariants && (
+                          <>
+                            <input
+                              type="text"
+                              defaultValue={item.description}
+                              onBlur={(e) => handleUpdateItemField(item.item_id, { description: e.target.value })}
+                              placeholder="รายละเอียด"
+                              style={{ flex: 1, minWidth: 120 }}
+                            />
+                            <input
+                              type="number"
+                              defaultValue={item.default_quantity ?? 1}
+                              onBlur={(e) =>
+                                handleUpdateItemField(item.item_id, {
+                                  default_quantity: e.target.value !== "" ? Number(e.target.value) : 1,
+                                })
+                              }
+                              title="ปริมาณ"
+                              min="0.01"
+                              step="any"
+                              style={{ width: 60 }}
+                            />
+                            <input
+                              type="number"
+                              defaultValue={item.default_amount ?? ""}
+                              onBlur={(e) =>
+                                handleUpdateItemField(item.item_id, {
+                                  default_amount: e.target.value !== "" ? Number(e.target.value) : null,
+                                })
+                              }
+                              title="ราคาต่อหน่วย"
+                              style={{ width: 80 }}
+                            />
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteItem(item.item_id)}
+                          style={{ border: "none", background: "transparent", color: "var(--danger-text)", cursor: "pointer" }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {hasVariants && (
+                        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4, marginLeft: 4 }}>
+                          มี sub-variant แล้ว ({variants.length} ตัว) — ใช้รายละเอียด/ราคาจาก sub-variant ด้านล่างตอนนำไปใช้งานแทน ไม่ใช้ค่า default ของรายการหลัก
+                        </div>
+                      )}
+
+                      {variants.map((variant) => (
+                        <div
+                          key={variant.variant_id}
+                          style={{ display: "flex", gap: 6, marginTop: 6, marginLeft: 16, flexWrap: "wrap", alignItems: "center" }}
+                        >
+                          <input
+                            type="text"
+                            defaultValue={variant.variant_label}
+                            onBlur={(e) => handleUpdateVariantField(variant.variant_id, { variant_label: e.target.value })}
+                            placeholder="ชื่อ sub-variant"
+                            style={{ width: 100 }}
+                          />
+                          <input
+                            type="text"
+                            defaultValue={variant.description}
+                            onBlur={(e) => handleUpdateVariantField(variant.variant_id, { description: e.target.value })}
+                            placeholder="รายละเอียด"
+                            style={{ flex: 1, minWidth: 100 }}
+                          />
+                          <input
+                            type="number"
+                            defaultValue={variant.default_quantity ?? 1}
+                            onBlur={(e) =>
+                              handleUpdateVariantField(variant.variant_id, {
+                                default_quantity: e.target.value !== "" ? Number(e.target.value) : 1,
+                              })
+                            }
+                            title="ปริมาณ"
+                            min="0.01"
+                            step="any"
+                            style={{ width: 60 }}
+                          />
+                          <input
+                            type="number"
+                            defaultValue={variant.default_amount ?? ""}
+                            onBlur={(e) =>
+                              handleUpdateVariantField(variant.variant_id, {
+                                default_amount: e.target.value !== "" ? Number(e.target.value) : null,
+                              })
+                            }
+                            title="ราคา"
+                            style={{ width: 80 }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteVariant(variant.variant_id)}
+                            style={{ border: "none", background: "transparent", color: "var(--danger-text)", cursor: "pointer" }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={() => handleAddVariant(item)}
+                        style={{ marginTop: 6, marginLeft: 16, fontSize: 12, border: "none", background: "transparent", color: "#2563eb", cursor: "pointer" }}
+                      >
+                        + เพิ่ม sub-variant
+                      </button>
+                    </div>
+                  );
+                })}
+
+                <button type="button" onClick={() => handleAddItem(t)} style={{ marginTop: 4, fontSize: 13 }}>
+                  + เพิ่มรายการ
+                </button>
               </div>
             )}
           </div>
