@@ -167,6 +167,10 @@ test.describe("SEC-102 — Forgot-password self-service flow (/login, /reset-pas
     await expect(page.getByRole("button", { name: "ส่งลิงก์ตั้งรหัสผ่านใหม่" })).toBeVisible();
   });
 
+  // ⚠️ Supabase Auth จำกัดอัตราส่งอีเมล resetPasswordForEmail ต่อ address (rate limit ระดับ
+  // โปรเจกต์ ไม่ใช่บั๊กแอป) — ถ้ารัน test นี้ถี่เกินไปในช่วงเวลาสั้นๆ (เช่นรันซ้ำหลายรอบตอน debug)
+  // จะเจอ error "ส่งลิงก์ไม่สำเร็จ" ทั้งที่โค้ดแอปทำงานถูกต้อง เจอแบบนี้ให้เว้นช่วงแล้วรันใหม่
+  // ก่อนสงสัยว่าเป็น regression จริง
   test("SEC-102b ส่งฟอร์มลืมรหัสผ่านด้วยอีเมล owner ที่มีอยู่จริง -> แสดงข้อความสำเร็จ", async ({ page }) => {
     await page.goto("/login");
     await page.getByRole("button", { name: "ลืมรหัสผ่าน?" }).click();

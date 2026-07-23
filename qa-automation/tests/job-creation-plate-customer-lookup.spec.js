@@ -86,6 +86,8 @@ test.beforeEach(async ({ page }) => {
 test.describe("LOOKUP-001 — Field order ของฟอร์มใหม่", () => {
   test('label "ทะเบียนรถ" ต้องอยู่ก่อน "ชื่อลูกค้า" ใน DOM', async ({ page }) => {
     await page.goto("/jobs/new");
+    // รอให้ฟอร์ม hydrate/render เสร็จก่อน — ทะเบียนรถเป็น input แรกในฟอร์ม ใช้เป็นสัญญาณว่าพร้อมแล้ว
+    await page.getByLabel("ทะเบียนรถ").waitFor({ state: "visible", timeout: 10_000 });
     const labelTexts = await page.locator("form label").allTextContents();
 
     const plateIndex = labelTexts.findIndex((t) => t.includes("ทะเบียนรถ"));
