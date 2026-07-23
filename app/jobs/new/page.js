@@ -41,6 +41,15 @@ function NewJobPageContent() {
   const [members, setMembers] = useState([]);
   const [workflowSteps, setWorkflowSteps] = useState([{ step_name: "", assigned_to: "" }]);
 
+  // ค้นทะเบียนรถจากงานเก่าของร้านนี้ — พิมพ์ทะเบียนก่อนชื่อลูกค้า ถ้าเจอเคยรับงานคันนี้มาก่อน
+  // ดึงทั้งข้อมูลลูกค้า+รถจากงานล่าสุดที่ทะเบียนตรงมาเติมให้ (แก้ไขต่อได้อิสระ ไม่ล็อก)
+  const [plateResults, setPlateResults] = useState([]);
+  const plateSearchIdRef = useRef(0);
+  // ช่องชื่อลูกค้าเป็นช่องค้นหาเสมอ — เผื่อกรณีลูกค้าเก่าแต่รถคันใหม่ (ทะเบียนหาไม่เจอ) เลือกแล้ว
+  // เติมแค่เบอร์/ที่อยู่ ไม่แตะทะเบียนที่พิมพ์ไว้
+  const [customerResults, setCustomerResults] = useState([]);
+  const customerSearchIdRef = useRef(0);
+
   useEffect(() => {
     if (!currentShopId) return;
     supabase
@@ -82,6 +91,86 @@ function NewJobPageContent() {
   function handleChange(e) {
     const { name, value } = e.target;
     setForm((f) => ({ ...f, [name]: value }));
+  }
+
+  async function searchPlateHistory(query) {
+    setForm((f) => ({ ...f, license_plate: query }));
+    const searchId = ++plateSearchIdRef.current;
+    if (!query.trim() || !currentShopId) {
+      setPlateResults([]);
+      return;
+    }
+    const { data } = await supabase
+      .from("jobs")
+      .select(
+        "job_id, license_plate, customer_name, customer_phone, customer_address, car_brand, car_model, car_year_display, generation_id, trim_id, created_at"
+      )
+      .eq("shop_id", currentShopId)
+      .ilike("license_plate", `%${query.trim()}%`)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    // กันผลลัพธ์เก่าที่ query ช้ากว่ามาทับผลของ query ที่พิมพ์ทีหลัง (เช่นลบข้อความจนช่องว่างแล้ว
+    // แต่ response ของคำค้นก่อนหน้ายังไม่กลับมา)
+    if (searchId !== plateSearchIdRef.current) return;
+
+    // ทะเบียนเดียวกันอาจเคยโผล่หลายงาน (เปลี่ยนเจ้าของรถก็เป็นไปได้) — เอาแค่งานล่าสุดต่อ 1 ทะเบียน
+    const seen = new Set();
+    const deduped = [];
+    for (const row of data || []) {
+      const key = (row.license_plate || "").trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(row);
+      if (deduped.length >= 8) break;
+    }
+    setPlateResults(deduped);
+  }
+
+  function selectPlateHistory(row) {
+    setForm((f) => ({
+      ...f,
+      license_plate: row.license_plate || "",
+      customer_name: row.customer_name || "",
+      customer_phone: row.customer_phone || "",
+      customer_address: row.customer_address || "",
+      car_brand: row.car_brand || "",
+      car_model: row.car_model || "",
+    }));
+    setSelectedGeneration(
+      row.generation_id
+        ? { year_range_display: row.car_year_display, generation_id: row.generation_id, trim_id: row.trim_id }
+        : null
+    );
+    setPlateResults([]);
+  }
+
+  async function searchCustomers(query) {
+    setForm((f) => ({ ...f, customer_name: query }));
+    const searchId = ++customerSearchIdRef.current;
+    if (!query.trim() || !currentShopId) {
+      setCustomerResults([]);
+      return;
+    }
+    const { data } = await supabase
+      .from("customers")
+      .select("customer_id, name, phone, address")
+      .eq("shop_id", currentShopId)
+      .ilike("name", `%${query.trim()}%`)
+      .limit(8);
+    if (searchId !== customerSearchIdRef.current) return;
+    setCustomerResults(data || []);
+  }
+
+  function selectCustomer(c) {
+    // ตั้งใจไม่แตะ license_plate — เคสนี้คือลูกค้าเก่าเอารถคันใหม่มา ทะเบียนที่พิมพ์ไว้ต้องคงอยู่
+    setForm((f) => ({
+      ...f,
+      customer_name: c.name || "",
+      customer_phone: c.phone || "",
+      customer_address: c.address || "",
+    }));
+    setCustomerResults([]);
   }
 
   async function handlePhotoChange(e) {
@@ -296,14 +385,141 @@ function NewJobPageContent() {
         )}
 
         <label>
-          ชื่อลูกค้า
-          <input
-            type="text"
-            name="customer_name"
-            value={form.customer_name}
-            onChange={handleChange}
-            placeholder="เช่น คุณสมชาย"
+          ทะเบียนรถ
+          <div style={{ position: "relative" }}>
+            <input
+              type="text"
+              name="license_plate"
+              value={form.license_plate}
+              onChange={(e) => searchPlateHistory(e.target.value)}
+              placeholder="เช่น กข 1234 กรุงเทพฯ — พิมพ์ค้นงานเก่าได้เลย"
+              autoComplete="off"
+            />
+            {plateResults.length > 0 && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  right: 0,
+                  zIndex: 10,
+                  background: "var(--surface)",
+                  border: "1px solid var(--border-strong)",
+                  borderRadius: 8,
+                  marginTop: 4,
+                  maxHeight: 240,
+                  overflowY: "auto",
+                }}
+              >
+                {plateResults.map((row) => (
+                  <button
+                    key={row.job_id}
+                    type="button"
+                    onClick={() => selectPlateHistory(row)}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: 10,
+                      border: "none",
+                      borderBottom: "1px solid var(--border)",
+                      background: "transparent",
+                      color: "var(--text)",
+                      cursor: "pointer",
+                      fontSize: 13,
+                    }}
+                  >
+                    🚗 {row.license_plate} — {row.customer_name || "ไม่ระบุลูกค้า"}
+                    {row.car_brand ? ` (${row.car_brand} ${row.car_model || ""})` : ""}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </label>
+
+        <div style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 6 }}>
+          🔍 ค้นหารถ (ยี่ห้อ/รุ่น)
+          <CarAutocomplete
+            onSelect={(item) => {
+              setForm((f) => ({
+                ...f,
+                car_brand: item?.brand_name || "",
+                car_model: item?.model_name || "",
+              }));
+              setSelectedGeneration(item);
+            }}
           />
+          {/* CarAutocomplete เก็บ query แสดงผลไว้ในตัวเอง ไม่รับ value จากภายนอก — ตอนดึงยี่ห้อ/รุ่น
+              มาจากประวัติทะเบียนเก่า (selectPlateHistory) ช่องค้นหาเลยไม่โชว์อะไรทั้งที่ set ค่าจริง
+              ไว้แล้ว ใส่บรรทัดยืนยันแยกกันสับสนว่ายังไม่ได้เลือกรถ */}
+          {form.car_brand && (
+            <div
+              style={{
+                fontSize: 12,
+                color: "var(--zone-text)",
+                background: "var(--zone-bg)",
+                padding: 8,
+                borderRadius: 8,
+              }}
+            >
+              🚗 {form.car_brand} {form.car_model}
+              {selectedGeneration?.year_range_display ? ` · ${selectedGeneration.year_range_display}` : ""}
+            </div>
+          )}
+        </div>
+
+        <label>
+          ชื่อลูกค้า
+          <div style={{ position: "relative" }}>
+            <input
+              type="text"
+              name="customer_name"
+              value={form.customer_name}
+              onChange={(e) => searchCustomers(e.target.value)}
+              placeholder="เช่น คุณสมชาย — พิมพ์ค้นลูกค้าเก่าได้เลย"
+              autoComplete="off"
+            />
+            {customerResults.length > 0 && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  right: 0,
+                  zIndex: 10,
+                  background: "var(--surface)",
+                  border: "1px solid var(--border-strong)",
+                  borderRadius: 8,
+                  marginTop: 4,
+                  maxHeight: 240,
+                  overflowY: "auto",
+                }}
+              >
+                {customerResults.map((c) => (
+                  <button
+                    key={c.customer_id}
+                    type="button"
+                    onClick={() => selectCustomer(c)}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: 10,
+                      border: "none",
+                      borderBottom: "1px solid var(--border)",
+                      background: "transparent",
+                      color: "var(--text)",
+                      cursor: "pointer",
+                      fontSize: 13,
+                    }}
+                  >
+                    👤 {c.name || "ไม่ระบุชื่อ"} {c.phone ? `— ${c.phone}` : ""}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </label>
 
         <label>
@@ -327,31 +543,6 @@ function NewJobPageContent() {
             placeholder="เช่น 123 ถ.สุขุมวิท แขวง... เขต... กรุงเทพฯ 10110"
           />
         </label>
-
-        <label>
-          ทะเบียนรถ
-          <input
-            type="text"
-            name="license_plate"
-            value={form.license_plate}
-            onChange={handleChange}
-            placeholder="เช่น กข 1234 กรุงเทพฯ"
-          />
-        </label>
-
-        <div style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 6 }}>
-          🔍 ค้นหารถ (ยี่ห้อ/รุ่น)
-          <CarAutocomplete
-            onSelect={(item) => {
-              setForm((f) => ({
-                ...f,
-                car_brand: item?.brand_name || "",
-                car_model: item?.model_name || "",
-              }));
-              setSelectedGeneration(item);
-            }}
-          />
-        </div>
 
         <label>
           ที่มา
