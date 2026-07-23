@@ -228,58 +228,42 @@ function NewJobPageContent() {
         }
       }
 
-      const { data, error } = await supabase
-        .from("jobs")
-        .insert({
-          shop_id: currentShopId,
-          customer_id: customerId,
-          customer_name: form.customer_name || null,
-          customer_phone: form.customer_phone || null,
-          customer_address: form.customer_address || null,
-          car_brand: form.car_brand || null,
-          car_model: form.car_model || null,
-          car_year_display: selectedGeneration?.year_range_display || null,
-          generation_id: selectedGeneration?.generation_id || null,
-          trim_id: selectedGeneration?.trim_id || null,
-          license_plate: form.license_plate || null,
-          source_type: form.source_type || null,
-          notes: form.notes || null,
-          photo_urls: photoUrls,
-          damage_points: damagePoints,
-          car_diagram_type: carDiagramType,
-          status: "received",
-          created_by: user?.id || null,
-        })
-        .select()
-        .single();
+      // แก้ JOB-202/203: เดิม insert jobs -> job_visibility_groups -> job_workflow_steps
+      // แยก 3 คำสั่งอิสระ ถ้าคำสั่งกลาง/ท้ายล้มเหลว จะเหลือ job ที่ "เห็นได้ทุกคน" ค้างอยู่
+      // (ข้อมูลรั่ว) และกด submit ซ้ำจะได้ job ซ้ำอีกใบ — ตอนนี้ครอบทั้ง 3 ส่วนเป็น RPC เดียว
+      // (create_job_atomic, db/atomic_job_creation_migration.sql) เป็น transaction เดียวจริง
+      // ถ้าส่วนไหนใน RPC fail ทั้งก้อน rollback หมด ไม่มี partial state หลงเหลือ
+      const validSteps = workflowSteps.filter((s) => s.step_name.trim());
+
+      const { data: newJob, error } = await supabase.rpc("create_job_atomic", {
+        p_shop_id: currentShopId,
+        p_customer_id: customerId,
+        p_customer_name: form.customer_name || null,
+        p_customer_phone: form.customer_phone || null,
+        p_customer_address: form.customer_address || null,
+        p_car_brand: form.car_brand || null,
+        p_car_model: form.car_model || null,
+        p_car_year_display: selectedGeneration?.year_range_display || null,
+        p_generation_id: selectedGeneration?.generation_id || null,
+        p_trim_id: selectedGeneration?.trim_id || null,
+        p_license_plate: form.license_plate || null,
+        p_source_type: form.source_type || null,
+        p_notes: form.notes || null,
+        p_photo_urls: photoUrls,
+        p_damage_points: damagePoints,
+        p_car_diagram_type: carDiagramType,
+        p_created_by: user?.id || null,
+        p_group_ids: selectedGroupIds, // เลือกได้หลายกลุ่ม — ไม่เลือกเลย = ทุกคนเห็น (เจตนา ไม่ใช่บั๊ก)
+        p_workflow_steps: validSteps.map((s) => ({
+          step_name: s.step_name.trim(),
+          assigned_to: s.assigned_to || null,
+        })),
+      });
 
       if (error) throw error;
 
-      // ผูกงานเข้ากับกลุ่มที่เลือก (เลือกได้หลายกลุ่ม — ไม่เลือกเลย = ทุกคนเห็น)
-      if (selectedGroupIds.length > 0) {
-        const { error: groupError } = await supabase.from("job_visibility_groups").insert(
-          selectedGroupIds.map((groupId) => ({ job_id: data.job_id, group_id: groupId }))
-        );
-        if (groupError) throw groupError;
-      }
-
-      // บันทึกขั้นตอนงานคร่าวๆ ที่ระบุไว้ (ถ้ามี)
-      const validSteps = workflowSteps.filter((s) => s.step_name.trim());
-      if (validSteps.length > 0) {
-        const { error: stepsError } = await supabase.from("job_workflow_steps").insert(
-          validSteps.map((s, i) => ({
-            job_id: data.job_id,
-            shop_id: currentShopId,
-            step_order: i,
-            step_name: s.step_name.trim(),
-            assigned_to: s.assigned_to || null,
-          }))
-        );
-        if (stepsError) throw stepsError;
-      }
-
       setMsg({ type: "success", text: "รับงานเรียบร้อยแล้ว ✅" });
-      setTimeout(() => router.push(`/jobs/${data.job_id}`), 600);
+      setTimeout(() => router.push(`/jobs/${newJob.job_id}`), 600);
     } catch (err) {
       setMsg({ type: "error", text: "บันทึกไม่สำเร็จ: " + err.message });
       setSaving(false);
