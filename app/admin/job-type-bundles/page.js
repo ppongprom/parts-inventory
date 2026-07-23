@@ -60,6 +60,7 @@ function JobTypeBundlesPageContent() {
         default_amount: item.default_amount !== "" ? Number(item.default_amount) : null,
         default_quantity: item.default_quantity !== "" ? Number(item.default_quantity) : 1,
         is_price_locked: item.is_price_locked,
+        part_id: item.part_id || null,
         sort_order: i,
       }));
       const { data: insertedItems, error: itemsError } = await supabase
@@ -79,6 +80,7 @@ function JobTypeBundlesPageContent() {
               description: v.description.trim(),
               default_amount: v.default_amount !== "" ? Number(v.default_amount) : null,
               default_quantity: v.default_quantity !== "" ? Number(v.default_quantity) : 1,
+              part_id: v.part_id || null,
               sort_order: vi,
             });
           });
@@ -209,6 +211,7 @@ function JobTypeBundlesPageContent() {
       {showNewModal && (
         <JobTypeBundleConfirmModal
           initialJobTypeName=""
+          shopId={currentShopId}
           saving={savingNew}
           onCancel={() => setShowNewModal(false)}
           onSave={handleCreateOnly}

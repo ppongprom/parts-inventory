@@ -368,7 +368,7 @@ function JobDetailPageContent() {
     const { data } = await supabase
       .from("job_type_bundle_templates")
       .select(
-        "template_id, job_type_name, job_type_bundle_items(item_id, category, item_group_label, description, default_amount, default_quantity, is_price_locked, sort_order, job_type_bundle_item_variants(variant_id, variant_label, description, default_amount, default_quantity, part_id, sort_order))"
+        "template_id, job_type_name, job_type_bundle_items(item_id, category, item_group_label, description, default_amount, default_quantity, is_price_locked, part_id, sort_order, job_type_bundle_item_variants(variant_id, variant_label, description, default_amount, default_quantity, part_id, sort_order))"
       )
       .eq("shop_id", currentShopId)
       .ilike("job_type_name", `%${query.trim()}%`)
@@ -439,6 +439,7 @@ function JobDetailPageContent() {
         description: item.description,
         amount: item.default_amount,
         quantity: item.default_quantity,
+        part_id: item.part_id || null,
         bundle_item_id: item.item_id,
       };
     });
@@ -467,12 +468,13 @@ function JobDetailPageContent() {
         default_amount: item.default_amount !== "" ? Number(item.default_amount) : null,
         default_quantity: item.default_quantity !== "" ? Number(item.default_quantity) : 1,
         is_price_locked: item.is_price_locked,
+        part_id: item.part_id || null,
         sort_order: i,
       }));
       const { data: insertedItems, error: itemsError } = await supabase
         .from("job_type_bundle_items")
         .insert(itemsToInsert)
-        .select("item_id, category, description, default_amount, default_quantity");
+        .select("item_id, category, description, default_amount, default_quantity, part_id");
       if (itemsError) throw itemsError;
 
       const variantRows = [];
@@ -487,6 +489,7 @@ function JobDetailPageContent() {
               description: v.description.trim(),
               default_amount: v.default_amount !== "" ? Number(v.default_amount) : null,
               default_quantity: v.default_quantity !== "" ? Number(v.default_quantity) : 1,
+              part_id: v.part_id || null,
               sort_order: vi,
             });
           });
@@ -519,6 +522,7 @@ function JobDetailPageContent() {
           description: item.description,
           amount: item.default_amount,
           quantity: item.default_quantity,
+          part_id: item.part_id || null,
           bundle_item_id: item.item_id,
         };
       });
@@ -1772,6 +1776,7 @@ function JobDetailPageContent() {
         {showNewBundleModal && (
           <JobTypeBundleConfirmModal
             initialJobTypeName={bundleQuery.trim()}
+            shopId={currentShopId}
             saving={savingBundle}
             onCancel={() => setShowNewBundleModal(false)}
             onSave={handleCreateAndApplyBundle}

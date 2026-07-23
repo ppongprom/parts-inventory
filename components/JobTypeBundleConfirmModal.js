@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 const CATEGORY_LABELS = { labor: "ค่าแรง", parts: "ค่าอะไหล่", other: "อื่นๆ" };
 
@@ -12,21 +13,50 @@ function emptyItem() {
     default_amount: "",
     default_quantity: "1",
     is_price_locked: true,
+    part_id: null,
     variants: [],
   };
 }
 
 function emptyVariant() {
-  return { variant_label: "", description: "", default_amount: "", default_quantity: "1" };
+  return { variant_label: "", description: "", default_amount: "", default_quantity: "1", part_id: null };
 }
 
 // การ์ด "Job Type Bundle Template" — Dev note: "ต้องออกแบบ modal/screen 'ยืนยันก่อน save' ใหม่ —
 // แสดงรายการทั้งหมดในเซตที่กำลังจะถูกบันทึกเป็น preset ใหม่ ให้แก้ไข/ลบรายการได้ก่อนกด Save จริง"
 // เฉพาะ Owner/Manager/Admin เท่านั้นที่เห็น modal นี้ (Technician ไม่มีทาง trigger ได้ — เลือกจาก
 // preset ที่มีอยู่แล้วเสมอ ไม่มีปุ่ม "สร้างชุดใหม่")
-export default function JobTypeBundleConfirmModal({ initialJobTypeName, onCancel, onSave, saving }) {
+export default function JobTypeBundleConfirmModal({ initialJobTypeName, shopId, onCancel, onSave, saving }) {
   const [jobTypeName, setJobTypeName] = useState(initialJobTypeName || "");
   const [items, setItems] = useState([emptyItem()]);
+
+  // ค้นหาอะไหล่จากสต็อกมาผูกกับรายการ/sub-variant — key เป็น "item-<i>" หรือ "variant-<i>-<vi>"
+  // แยกจาก items state เพราะเป็นแค่ query/ผลลัพธ์ชั่วคราว ไม่ต้องส่งไป onSave
+  const [partQueries, setPartQueries] = useState({});
+  const [partResults, setPartResults] = useState({});
+
+  async function searchParts(key, query) {
+    setPartQueries((q) => ({ ...q, [key]: query }));
+    if (!query.trim() || !shopId) {
+      setPartResults((r) => ({ ...r, [key]: [] }));
+      return;
+    }
+    const { data } = await supabase
+      .from("parts")
+      .select("id, part_name, price, quantity, item_type")
+      .eq("shop_id", shopId)
+      .in("item_type", ["consumable", "salvage"])
+      .eq("is_active", true)
+      .gt("quantity", 0)
+      .ilike("part_name", `%${query.trim()}%`)
+      .limit(8);
+    setPartResults((r) => ({ ...r, [key]: data || [] }));
+  }
+
+  function clearPartSearch(key) {
+    setPartQueries((q) => ({ ...q, [key]: "" }));
+    setPartResults((r) => ({ ...r, [key]: [] }));
+  }
 
   function updateItem(index, patch) {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
@@ -55,6 +85,27 @@ export default function JobTypeBundleConfirmModal({ initialJobTypeName, onCancel
     setItems((prev) =>
       prev.map((it, i) => (i === itemIndex ? { ...it, variants: it.variants.filter((_, vi) => vi !== variantIndex) } : it))
     );
+  }
+
+  // เลือกอะไหล่จากสต็อก — เติมชื่อ/รายละเอียด/ราคาให้อัตโนมัติ พร้อมผูก part_id (ยังไม่ตัดสต็อกจริง
+  // ตอน save เซต — ตัดจริงตอนนำไปใช้ในงานถ้าต้องการ ต้องทำแยกอีกขั้น)
+  function selectPartForItem(itemIndex, part) {
+    updateItem(itemIndex, {
+      item_group_label: part.part_name,
+      description: part.part_name,
+      default_amount: part.price != null ? String(part.price) : "",
+      part_id: part.id,
+    });
+    clearPartSearch(`item-${itemIndex}`);
+  }
+  function selectPartForVariant(itemIndex, variantIndex, part) {
+    updateVariant(itemIndex, variantIndex, {
+      variant_label: part.part_name,
+      description: part.part_name,
+      default_amount: part.price != null ? String(part.price) : "",
+      part_id: part.id,
+    });
+    clearPartSearch(`variant-${itemIndex}-${variantIndex}`);
   }
 
   const canSave = jobTypeName.trim() && items.length > 0 && items.every((it) => it.item_group_label.trim() && it.description.trim());
@@ -147,7 +198,7 @@ export default function JobTypeBundleConfirmModal({ initialJobTypeName, onCancel
                 type="text"
                 placeholder="รายละเอียด default"
                 value={item.description}
-                onChange={(e) => updateItem(itemIndex, { description: e.target.value })}
+                onChange={(e) => updateItem(itemIndex, { description: e.target.value, part_id: null })}
                 style={{ flex: 1, minWidth: 140 }}
               />
               <input
@@ -168,47 +219,165 @@ export default function JobTypeBundleConfirmModal({ initialJobTypeName, onCancel
               />
             </div>
 
-            {item.variants.map((variant, variantIndex) => (
-              <div key={variantIndex} style={{ display: "flex", gap: 6, marginTop: 6, marginLeft: 16, flexWrap: "wrap" }}>
-                <input
-                  type="text"
-                  placeholder="ชื่อ sub-variant เช่น CVT"
-                  value={variant.variant_label}
-                  onChange={(e) => updateVariant(itemIndex, variantIndex, { variant_label: e.target.value })}
-                  style={{ width: 100 }}
-                />
-                <input
-                  type="text"
-                  placeholder="รายละเอียด"
-                  value={variant.description}
-                  onChange={(e) => updateVariant(itemIndex, variantIndex, { description: e.target.value })}
-                  style={{ flex: 1, minWidth: 100 }}
-                />
-                <input
-                  type="number"
-                  placeholder="ปริมาณ"
-                  value={variant.default_quantity}
-                  onChange={(e) => updateVariant(itemIndex, variantIndex, { default_quantity: e.target.value })}
-                  style={{ width: 60 }}
-                  min="0.01"
-                  step="any"
-                />
-                <input
-                  type="number"
-                  placeholder="ราคา"
-                  value={variant.default_amount}
-                  onChange={(e) => updateVariant(itemIndex, variantIndex, { default_amount: e.target.value })}
-                  style={{ width: 80 }}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeVariant(itemIndex, variantIndex)}
-                  style={{ border: "none", background: "transparent", color: "var(--danger-text)", cursor: "pointer" }}
+            {/* ค้นหาอะไหล่จากสต็อกมาผูกกับรายการนี้ (ไม่บังคับ) — เลือกแล้วเติมชื่อ/ราคาให้อัตโนมัติ
+                ใช้เมื่อรายการไม่มี sub-variant คือรายการนี้เองที่ตรงกับ SKU สต็อกตัวเดียว */}
+            <div style={{ position: "relative", marginTop: 6 }}>
+              <input
+                type="text"
+                placeholder="🔍 ค้นหาจากสต็อก (ไม่บังคับ — เลือกแล้วเติมชื่อ/ราคาให้อัตโนมัติ)"
+                value={partQueries[`item-${itemIndex}`] || ""}
+                onChange={(e) => searchParts(`item-${itemIndex}`, e.target.value)}
+                style={{ width: "100%" }}
+              />
+              {(partResults[`item-${itemIndex}`] || []).length > 0 && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    right: 0,
+                    zIndex: 10,
+                    background: "var(--surface)",
+                    border: "1px solid var(--border-strong)",
+                    borderRadius: 8,
+                    marginTop: 4,
+                    maxHeight: 200,
+                    overflowY: "auto",
+                  }}
                 >
-                  ✕
-                </button>
-              </div>
-            ))}
+                  {partResults[`item-${itemIndex}`].map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => selectPartForItem(itemIndex, p)}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        textAlign: "left",
+                        padding: 10,
+                        border: "none",
+                        borderBottom: "1px solid var(--border)",
+                        background: "transparent",
+                        color: "var(--text)",
+                        cursor: "pointer",
+                        fontSize: 13,
+                      }}
+                    >
+                      {p.item_type === "salvage" ? "🔩" : "📦"} {p.part_name} — เหลือ {p.quantity} ·{" "}
+                      {p.price ? `${Number(p.price).toLocaleString()} บาท` : "ไม่มีราคา"}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {item.part_id && (
+                <div style={{ fontSize: 11, color: "var(--zone-text)", marginTop: 4 }}>
+                  🔗 ผูกกับสต็อก: {item.description}
+                </div>
+              )}
+            </div>
+
+            {item.variants.map((variant, variantIndex) => {
+              const variantKey = `variant-${itemIndex}-${variantIndex}`;
+              return (
+                <div key={variantIndex} style={{ marginTop: 6, marginLeft: 16 }}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <input
+                      type="text"
+                      placeholder="ชื่อ sub-variant เช่น CVT"
+                      value={variant.variant_label}
+                      onChange={(e) => updateVariant(itemIndex, variantIndex, { variant_label: e.target.value })}
+                      style={{ width: 100 }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="รายละเอียด"
+                      value={variant.description}
+                      onChange={(e) => updateVariant(itemIndex, variantIndex, { description: e.target.value, part_id: null })}
+                      style={{ flex: 1, minWidth: 100 }}
+                    />
+                    <input
+                      type="number"
+                      placeholder="ปริมาณ"
+                      value={variant.default_quantity}
+                      onChange={(e) => updateVariant(itemIndex, variantIndex, { default_quantity: e.target.value })}
+                      style={{ width: 60 }}
+                      min="0.01"
+                      step="any"
+                    />
+                    <input
+                      type="number"
+                      placeholder="ราคา"
+                      value={variant.default_amount}
+                      onChange={(e) => updateVariant(itemIndex, variantIndex, { default_amount: e.target.value })}
+                      style={{ width: 80 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeVariant(itemIndex, variantIndex)}
+                      style={{ border: "none", background: "transparent", color: "var(--danger-text)", cursor: "pointer" }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* ค้นหาอะไหล่จากสต็อกมาผูกกับ sub-variant นี้ (ไม่บังคับ) */}
+                  <div style={{ position: "relative", marginTop: 4 }}>
+                    <input
+                      type="text"
+                      placeholder="🔍 ค้นหาจากสต็อก (ไม่บังคับ)"
+                      value={partQueries[variantKey] || ""}
+                      onChange={(e) => searchParts(variantKey, e.target.value)}
+                      style={{ width: "100%" }}
+                    />
+                    {(partResults[variantKey] || []).length > 0 && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "100%",
+                          left: 0,
+                          right: 0,
+                          zIndex: 10,
+                          background: "var(--surface)",
+                          border: "1px solid var(--border-strong)",
+                          borderRadius: 8,
+                          marginTop: 4,
+                          maxHeight: 200,
+                          overflowY: "auto",
+                        }}
+                      >
+                        {partResults[variantKey].map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => selectPartForVariant(itemIndex, variantIndex, p)}
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              textAlign: "left",
+                              padding: 10,
+                              border: "none",
+                              borderBottom: "1px solid var(--border)",
+                              background: "transparent",
+                              color: "var(--text)",
+                              cursor: "pointer",
+                              fontSize: 13,
+                            }}
+                          >
+                            {p.item_type === "salvage" ? "🔩" : "📦"} {p.part_name} — เหลือ {p.quantity} ·{" "}
+                            {p.price ? `${Number(p.price).toLocaleString()} บาท` : "ไม่มีราคา"}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {variant.part_id && (
+                      <div style={{ fontSize: 11, color: "var(--zone-text)", marginTop: 4 }}>
+                        🔗 ผูกกับสต็อก: {variant.description}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
             <button
               type="button"
               onClick={() => addVariant(itemIndex)}
