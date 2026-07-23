@@ -29,6 +29,9 @@ function emptyVariant() {
 export default function JobTypeBundleConfirmModal({ initialJobTypeName, shopId, onCancel, onSave, saving }) {
   const [jobTypeName, setJobTypeName] = useState(initialJobTypeName || "");
   const [items, setItems] = useState([emptyItem()]);
+  // preset ขั้นตอนการทำงาน — เก็บแค่ชื่อ+ลำดับ ไม่มี assigned_to เด็ดขาด (ตัดสินใจแล้ว) ตอนนำเซตไป
+  // ใช้จริงจะ insert เข้า job_workflow_steps แบบยังไม่มอบหมายใครเสมอ
+  const [steps, setSteps] = useState([]);
 
   // ค้นหาอะไหล่จากสต็อกมาผูกกับรายการ/sub-variant — key เป็น "item-<i>" หรือ "variant-<i>-<vi>"
   // แยกจาก items state เพราะเป็นแค่ query/ผลลัพธ์ชั่วคราว ไม่ต้องส่งไป onSave
@@ -85,6 +88,16 @@ export default function JobTypeBundleConfirmModal({ initialJobTypeName, shopId, 
     setItems((prev) =>
       prev.map((it, i) => (i === itemIndex ? { ...it, variants: it.variants.filter((_, vi) => vi !== variantIndex) } : it))
     );
+  }
+
+  function addStep() {
+    setSteps((prev) => [...prev, { step_name: "" }]);
+  }
+  function updateStep(index, value) {
+    setSteps((prev) => prev.map((s, i) => (i === index ? { step_name: value } : s)));
+  }
+  function removeStep(index) {
+    setSteps((prev) => prev.filter((_, i) => i !== index));
   }
 
   // เลือกอะไหล่จากสต็อก — เติมชื่อ/รายละเอียด/ราคาให้อัตโนมัติ พร้อมผูก part_id (ยังไม่ตัดสต็อกจริง
@@ -403,13 +416,49 @@ export default function JobTypeBundleConfirmModal({ initialJobTypeName, shopId, 
           + เพิ่มรายการ
         </button>
 
+        {/* preset ขั้นตอนการทำงาน — ไม่บังคับ, ไม่มีเรื่องมอบหมายเลย เก็บแค่ชื่อ+ลำดับ ตอนใช้เซตจริง
+            จะไปสร้างขั้นตอนในงานแบบยังไม่มอบหมายใครเสมอ */}
+        <div style={{ marginTop: 20, fontWeight: 600, fontSize: 13 }}>📝 ขั้นตอนการทำงาน (preset — ไม่บังคับ)</div>
+        {steps.map((step, i) => (
+          <div key={i} style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "var(--text-muted)", width: 18 }}>{i + 1}.</span>
+            <input
+              type="text"
+              placeholder="เช่น รื้อตรวจสภาพ"
+              value={step.step_name}
+              onChange={(e) => updateStep(i, e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              onClick={() => removeStep(i)}
+              style={{ border: "none", background: "transparent", color: "var(--danger-text)", cursor: "pointer" }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={addStep}
+          style={{ marginTop: 6, fontSize: 12, border: "none", background: "transparent", color: "#2563eb", cursor: "pointer" }}
+        >
+          + เพิ่มขั้นตอน
+        </button>
+
         <div style={{ display: "flex", gap: 8, marginTop: 20, justifyContent: "flex-end" }}>
           <button type="button" onClick={onCancel} disabled={saving}>
             ยกเลิก
           </button>
           <button
             type="button"
-            onClick={() => onSave(jobTypeName.trim(), items)}
+            onClick={() =>
+              onSave(
+                jobTypeName.trim(),
+                items,
+                steps.map((s) => s.step_name.trim()).filter(Boolean)
+              )
+            }
             disabled={!canSave || saving}
             style={{ background: "#2563eb", color: "white", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 600, cursor: "pointer" }}
           >

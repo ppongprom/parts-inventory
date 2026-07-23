@@ -319,7 +319,7 @@ function JobDetailPageContent() {
     const { data } = await supabase
       .from("job_type_bundle_templates")
       .select(
-        "template_id, job_type_name, job_type_bundle_items(item_id, category, item_group_label, description, default_amount, default_quantity, is_price_locked, part_id, sort_order, job_type_bundle_item_variants(variant_id, variant_label, description, default_amount, default_quantity, part_id, sort_order))"
+        "template_id, job_type_name, job_type_bundle_items(item_id, category, item_group_label, description, default_amount, default_quantity, is_price_locked, part_id, sort_order, job_type_bundle_item_variants(variant_id, variant_label, description, default_amount, default_quantity, part_id, sort_order)), job_type_bundle_steps(step_id, step_name, sort_order)"
       )
       .eq("shop_id", currentShopId)
       .ilike("job_type_name", `%${query.trim()}%`)
@@ -370,6 +370,26 @@ function JobDetailPageContent() {
     }
   }
 
+  // ใส่ preset ขั้นตอนการทำงานของเซต ต่อท้ายขั้นตอนที่มีอยู่แล้วในงานนี้ (ไม่ลบ/ทับของเดิม) —
+  // ตั้งใจ assigned_to เป็น null เสมอ ไม่ผูกคนรับผิดชอบมาจากเซต (ตัดสินใจแล้ว)
+  async function applyBundleSteps(stepNames) {
+    if (!stepNames || stepNames.length === 0) return;
+    const maxOrder = workflowSteps.reduce((max, s) => Math.max(max, s.step_order || 0), -1);
+    const rows = stepNames.map((name, i) => ({
+      job_id: jobId,
+      shop_id: currentShopId,
+      step_order: maxOrder + i + 1,
+      step_name: name,
+      assigned_to: null,
+    }));
+    const { error } = await supabase.from("job_workflow_steps").insert(rows);
+    if (error) {
+      setMsg({ type: "error", text: "เพิ่มขั้นตอนจากเซตไม่สำเร็จ: " + error.message });
+    } else {
+      fetchWorkflowSteps();
+    }
+  }
+
   function handleApplyBundle() {
     const items = selectedBundleTemplate?.job_type_bundle_items || [];
     const rows = items.map((item) => {
@@ -395,13 +415,17 @@ function JobDetailPageContent() {
       };
     });
     applyBundleItems(rows);
+    const stepNames = [...(selectedBundleTemplate?.job_type_bundle_steps || [])]
+      .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+      .map((s) => s.step_name);
+    applyBundleSteps(stepNames);
     setSelectedBundleTemplate(null);
     setBundleVariantChoices({});
   }
 
   // Owner/Manager/Admin เท่านั้นที่เห็นปุ่มนี้ (การ์ด) — สร้างเซตใหม่ inline จากหน้างานเลย ไม่ต้อง
   // ไปหน้าตั้งค่าแยก แล้วนำมาใช้กับงานปัจจุบันทันที
-  async function handleCreateAndApplyBundle(jobTypeName, items) {
+  async function handleCreateAndApplyBundle(jobTypeName, items, steps) {
     setSavingBundle(true);
     try {
       const { data: template, error: templateError } = await supabase
@@ -478,6 +502,18 @@ function JobDetailPageContent() {
         };
       });
       await applyBundleItems(rows);
+
+      if (steps && steps.length > 0) {
+        const stepsToInsert = steps.map((name, i) => ({
+          template_id: template.template_id,
+          step_name: name,
+          sort_order: i,
+        }));
+        const { error: stepsError } = await supabase.from("job_type_bundle_steps").insert(stepsToInsert);
+        if (stepsError) throw stepsError;
+        await applyBundleSteps(steps);
+      }
+
       setShowNewBundleModal(false);
       clearSearchState();
       setNewCostItem((f) => ({ ...f, description: "" }));
@@ -1650,6 +1686,15 @@ function JobDetailPageContent() {
                 </div>
               );
             })}
+            {(selectedBundleTemplate.job_type_bundle_steps || []).length > 0 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
+                📝 จะเพิ่มขั้นตอน:{" "}
+                {[...selectedBundleTemplate.job_type_bundle_steps]
+                  .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+                  .map((s) => s.step_name)
+                  .join(", ")}
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               <button type="button" onClick={handleApplyBundle}>
                 ✅ ใช้เซตนี้

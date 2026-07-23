@@ -27,7 +27,7 @@ function JobTypeBundlesPageContent() {
     const { data, error: fetchError } = await supabase
       .from("job_type_bundle_templates")
       .select(
-        "template_id, job_type_name, job_type_bundle_items(item_id, category, item_group_label, description, default_amount, default_quantity, is_price_locked, sort_order, job_type_bundle_item_variants(variant_id, variant_label, description, default_amount, default_quantity, sort_order))"
+        "template_id, job_type_name, job_type_bundle_items(item_id, category, item_group_label, description, default_amount, default_quantity, is_price_locked, sort_order, job_type_bundle_item_variants(variant_id, variant_label, description, default_amount, default_quantity, sort_order)), job_type_bundle_steps(step_id, step_name, sort_order)"
       )
       .eq("shop_id", currentShopId)
       .order("job_type_name");
@@ -41,7 +41,7 @@ function JobTypeBundlesPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentShopId]);
 
-  async function handleCreateOnly(jobTypeName, items) {
+  async function handleCreateOnly(jobTypeName, items, steps) {
     setSavingNew(true);
     setError(null);
     try {
@@ -88,6 +88,13 @@ function JobTypeBundlesPageContent() {
       if (variantRows.length > 0) {
         const { error: variantsError } = await supabase.from("job_type_bundle_item_variants").insert(variantRows);
         if (variantsError) throw variantsError;
+      }
+
+      if (steps && steps.length > 0) {
+        const { error: stepsError } = await supabase.from("job_type_bundle_steps").insert(
+          steps.map((name, i) => ({ template_id: template.template_id, step_name: name, sort_order: i }))
+        );
+        if (stepsError) throw stepsError;
       }
 
       setShowNewModal(false);
@@ -157,6 +164,30 @@ function JobTypeBundlesPageContent() {
 
   async function handleDeleteVariant(variantId) {
     const { error: deleteError } = await supabase.from("job_type_bundle_item_variants").delete().eq("variant_id", variantId);
+    if (deleteError) setError(deleteError.message);
+    else loadTemplates();
+  }
+
+  // preset ขั้นตอนการทำงาน — ไม่มี assigned_to เลย (ตัดสินใจแล้ว) แก้ไข/เพิ่ม/ลบได้ตรงๆ ในหน้านี้
+  async function handleUpdateStepField(stepId, patch) {
+    const { error: updateError } = await supabase.from("job_type_bundle_steps").update(patch).eq("step_id", stepId);
+    if (updateError) setError(updateError.message);
+    else loadTemplates();
+  }
+
+  async function handleAddStep(template) {
+    const nextSort = (template.job_type_bundle_steps || []).length;
+    const { error: insertError } = await supabase.from("job_type_bundle_steps").insert({
+      template_id: template.template_id,
+      step_name: "ขั้นตอนใหม่",
+      sort_order: nextSort,
+    });
+    if (insertError) setError(insertError.message);
+    else loadTemplates();
+  }
+
+  async function handleDeleteStep(stepId) {
+    const { error: deleteError } = await supabase.from("job_type_bundle_steps").delete().eq("step_id", stepId);
     if (deleteError) setError(deleteError.message);
     else loadTemplates();
   }
@@ -348,6 +379,36 @@ function JobTypeBundlesPageContent() {
 
                 <button type="button" onClick={() => handleAddItem(t)} style={{ marginTop: 4, fontSize: 13 }}>
                   + เพิ่มรายการ
+                </button>
+
+                <div style={{ marginTop: 16, fontWeight: 600, fontSize: 13 }}>📝 ขั้นตอนการทำงาน (preset)</div>
+                {(t.job_type_bundle_steps || [])
+                  .slice()
+                  .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+                  .map((step) => (
+                    <div key={step.step_id} style={{ display: "flex", gap: 6, marginTop: 6, alignItems: "center" }}>
+                      <input
+                        type="text"
+                        defaultValue={step.step_name}
+                        onBlur={(e) => handleUpdateStepField(step.step_id, { step_name: e.target.value })}
+                        placeholder="ชื่อขั้นตอน"
+                        style={{ flex: 1, fontSize: 13 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteStep(step.step_id)}
+                        style={{ border: "none", background: "transparent", color: "var(--danger-text)", cursor: "pointer" }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                <button
+                  type="button"
+                  onClick={() => handleAddStep(t)}
+                  style={{ marginTop: 6, fontSize: 12, border: "none", background: "transparent", color: "#2563eb", cursor: "pointer" }}
+                >
+                  + เพิ่มขั้นตอน
                 </button>
               </div>
             )}
