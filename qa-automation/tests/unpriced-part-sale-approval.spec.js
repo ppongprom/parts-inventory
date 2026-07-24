@@ -115,7 +115,7 @@ test.describe.serial("card-unpriced-part-sale-approval", () => {
     await expect(page.getByTestId(`unpriced-badge-${partId}`)).not.toContainText("จะเข้ารออนุมัติ");
 
     await page.getByLabel("ราคาขาย/หน่วย").fill("100");
-    const paymentSelect = page.locator("select").first();
+    const paymentSelect = page.getByLabel("วิธีชำระเงิน");
     await paymentSelect.selectOption("cash");
     await page.getByRole("button", { name: "✓ ยืนยันการขายทั้งหมด" }).click();
 
@@ -138,7 +138,7 @@ test.describe.serial("card-unpriced-part-sale-approval", () => {
     await expect(page.getByTestId(`unpriced-badge-${partId}`)).toContainText("จะเข้ารออนุมัติ");
 
     await page.getByLabel("ราคาขาย/หน่วย").fill("50");
-    await page.locator("select").first().selectOption("cash");
+    await page.getByLabel("วิธีชำระเงิน").selectOption("cash");
     await page.getByRole("button", { name: "✓ ยืนยันการขายทั้งหมด" }).click();
 
     await expect(page.locator(".msg.success")).toBeVisible({ timeout: 15_000 });
@@ -168,7 +168,7 @@ test.describe.serial("card-unpriced-part-sale-approval", () => {
     await expectLoginSucceeded(page);
     await page.goto(`/checkout?ids=${partId}`);
     await page.getByLabel("ราคาขาย/หน่วย").fill("777");
-    await page.locator("select").first().selectOption("cash");
+    await page.getByLabel("วิธีชำระเงิน").selectOption("cash");
     await page.getByRole("button", { name: "✓ ยืนยันการขายทั้งหมด" }).click();
     await expect(page.locator(".msg.success")).toBeVisible({ timeout: 15_000 });
 
@@ -190,7 +190,7 @@ test.describe.serial("card-unpriced-part-sale-approval", () => {
     await expectLoginSucceeded(page);
     await page.goto(`/checkout?ids=${partId}`);
     await page.getByLabel("ราคาขาย/หน่วย").fill("321");
-    await page.locator("select").first().selectOption("cash");
+    await page.getByLabel("วิธีชำระเงิน").selectOption("cash");
     await page.getByRole("button", { name: "✓ ยืนยันการขายทั้งหมด" }).click();
     await expect(page.locator(".msg.success")).toBeVisible({ timeout: 15_000 });
 
@@ -209,6 +209,9 @@ test.describe.serial("card-unpriced-part-sale-approval", () => {
     const pendingBlock = managerPage.getByTestId(`pending-action-${actionId}`);
     await expect(pendingBlock).toBeVisible({ timeout: 10_000 });
     await pendingBlock.getByRole("button", { name: "✅ อนุมัติ" }).click();
+    // รอให้แถวหายไปจากคิว (แปลว่า RPC + side effect จบแล้วจริง) ก่อนปิด context — ปิดเร็วเกินไป
+    // จะตัด network request ของ RPC ที่ยังไม่จบทิ้งกลางทาง
+    await expect(pendingBlock).toHaveCount(0, { timeout: 10_000 });
 
     await managerPage.close();
 
@@ -226,7 +229,7 @@ test.describe.serial("card-unpriced-part-sale-approval", () => {
     await expectLoginSucceeded(page);
     await page.goto(`/checkout?ids=${partId}`);
     await page.getByLabel("ราคาขาย/หน่วย").fill("999");
-    await page.locator("select").first().selectOption("cash");
+    await page.getByLabel("วิธีชำระเงิน").selectOption("cash");
     await page.getByRole("button", { name: "✓ ยืนยันการขายทั้งหมด" }).click();
     await expect(page.locator(".msg.success")).toBeVisible({ timeout: 15_000 });
 
@@ -242,6 +245,7 @@ test.describe.serial("card-unpriced-part-sale-approval", () => {
     const pendingBlock = managerPage.getByTestId(`pending-action-${actionId}`);
     await expect(pendingBlock).toBeVisible({ timeout: 10_000 });
     await pendingBlock.getByRole("button", { name: "❌ ปฏิเสธ" }).click();
+    await expect(pendingBlock).toHaveCount(0, { timeout: 10_000 });
     await managerPage.close();
 
     await expect
@@ -280,7 +284,7 @@ test.describe.serial("card-unpriced-part-sale-approval", () => {
     await expectLoginSucceeded(page);
     await page.goto(`/checkout?ids=${partId}`);
     await page.getByLabel("ราคาขาย/หน่วย").fill("55");
-    await page.locator("select").first().selectOption("cash");
+    await page.getByLabel("วิธีชำระเงิน").selectOption("cash");
     await page.getByRole("button", { name: "✓ ยืนยันการขายทั้งหมด" }).click();
     await expect(page.locator(".msg.success")).toBeVisible({ timeout: 15_000 });
 
@@ -319,7 +323,7 @@ test.describe.serial("card-unpriced-part-sale-approval", () => {
     await page.getByTestId(`cost-reason-${partId}`).fill("แก้ราคาต้นทุนตอน checkout — QA test");
 
     await page.getByLabel("ราคาขาย/หน่วย").fill("300");
-    await page.locator("select").first().selectOption("cash");
+    await page.getByLabel("วิธีชำระเงิน").selectOption("cash");
     await page.getByRole("button", { name: "✓ ยืนยันการขายทั้งหมด" }).click();
     await expect(page.locator(".msg.success")).toBeVisible({ timeout: 15_000 });
 
@@ -331,11 +335,11 @@ test.describe.serial("card-unpriced-part-sale-approval", () => {
     // ครอบทุกคอลัมน์ของ parts อยู่แล้ว — ไม่ต้องมี audit mechanism ใหม่แยกต่างหาก)
     const { data: auditRows, error: auditError } = await adminClient()
       .from("audit_log")
-      .select("old_data, new_data, changed_by_user_id, action, created_at")
+      .select("old_data, new_data, changed_by_user_id, action, changed_at")
       .eq("table_name", "parts")
       .eq("record_uuid", partId)
       .eq("action", "UPDATE")
-      .order("created_at", { ascending: false })
+      .order("changed_at", { ascending: false })
       .limit(5);
     expect(auditError).toBeFalsy();
     const match = (auditRows || []).find(
