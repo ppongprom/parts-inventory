@@ -181,7 +181,7 @@ function OptionsAdminPageContent() {
 
 export default function OptionsAdminPage() {
   return (
-    <RequireAuth allowedRoles={["owner", "manager"]}>
+    <RequireAuth allowedRoles={["owner", "manager"]} requiredFeature="admin_basic">
       <OptionsAdminPageContent />
     </RequireAuth>
   );

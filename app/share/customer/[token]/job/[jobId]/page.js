@@ -19,6 +19,20 @@ const CATEGORY_LABELS = {
   other: "อื่นๆ",
 };
 
+const STEP_STATUS_LABELS = {
+  pending: "⏳ รอเริ่ม",
+  in_progress: "🔧 กำลังทำ",
+  on_hold: "⏸️ หยุดชั่วคราว",
+  done: "✅ เสร็จแล้ว",
+  skipped: "⏭️ ข้าม",
+};
+
+const STEP_PHOTO_CATEGORIES = [
+  { key: "general", label: "สภาพทั่วไป" },
+  { key: "before", label: "ก่อนเปลี่ยน/แก้ไข" },
+  { key: "after", label: "หลังเปลี่ยน/แก้ไข" },
+];
+
 export default function CustomerJobDetailPage() {
   const params = useParams();
   const { token, jobId } = params;
@@ -26,7 +40,18 @@ export default function CustomerJobDetailPage() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [lightboxPhotos, setLightboxPhotos] = useState(null);
   const [lightboxIndex, setLightboxIndex] = useState(null);
+
+  function openLightbox(photos, index) {
+    setLightboxPhotos(photos);
+    setLightboxIndex(index);
+  }
+
+  function closeLightbox() {
+    setLightboxIndex(null);
+    setLightboxPhotos(null);
+  }
 
   useEffect(() => {
     fetchData();
@@ -64,7 +89,7 @@ export default function CustomerJobDetailPage() {
     );
   }
 
-  const { job, cost_items, total, shop_name, customer_name } = data;
+  const { job, cost_items, total, shop_name, customer_name, workflow_steps } = data;
 
   return (
     <>
@@ -185,17 +210,72 @@ export default function CustomerJobDetailPage() {
               {job.photo_urls.map((url, i) => (
                 <div className="photo-thumb" key={i}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt={`รูป ${i + 1}`} onClick={() => setLightboxIndex(i)} style={{ cursor: "zoom-in" }} />
+                  <img
+                    src={url}
+                    alt={`รูป ${i + 1}`}
+                    onClick={() => openLightbox(job.photo_urls, i)}
+                    style={{ cursor: "zoom-in" }}
+                  />
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {lightboxIndex !== null && (
+        {/* การ์ด "รูปหลักฐานต่อขั้นตอนงาน" — ให้ลูกค้าติดตามสถานะซ่อมทีละขั้นตอน พร้อมหลักฐาน
+           ภาพก่อน-หลังเปลี่ยน/แก้ไข เป็นจุดประสงค์หลักของหน้าแชร์นี้ */}
+        {workflow_steps?.length > 0 && (
+          <div className="no-print" style={{ marginTop: 24 }}>
+            <h3 style={{ fontSize: 15, marginBottom: 10 }}>ความคืบหน้าการซ่อม</h3>
+            {workflow_steps.map((step, index) => (
+              <div
+                key={step.step_id}
+                style={{
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  padding: 12,
+                  marginBottom: 10,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>
+                    {index + 1}. {step.step_name}
+                  </span>
+                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    {STEP_STATUS_LABELS[step.status] || step.status}
+                  </span>
+                </div>
+                {STEP_PHOTO_CATEGORIES.map((cat) => {
+                  const urls = step.photos?.[cat.key] || [];
+                  if (!urls.length) return null;
+                  return (
+                    <div key={cat.key} style={{ marginTop: 6 }}>
+                      <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 4 }}>{cat.label}</div>
+                      <div className="photo-thumb-row">
+                        {urls.map((url, i) => (
+                          <div className="photo-thumb" key={i}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url}
+                              alt={`${cat.label} ${i + 1}`}
+                              onClick={() => openLightbox(urls, i)}
+                              style={{ cursor: "zoom-in" }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {lightboxIndex !== null && lightboxPhotos?.length > 0 && (
           <div
             className="no-print"
-            onClick={() => setLightboxIndex(null)}
+            onClick={closeLightbox}
             style={{
               position: "fixed",
               inset: 0,
@@ -210,7 +290,7 @@ export default function CustomerJobDetailPage() {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={job.photo_urls[lightboxIndex]}
+              src={lightboxPhotos[lightboxIndex]}
               alt="ขยายรูป"
               onClick={(e) => e.stopPropagation()}
               style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8, objectFit: "contain" }}

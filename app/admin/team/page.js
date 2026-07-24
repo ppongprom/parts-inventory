@@ -898,7 +898,7 @@ function TeamPageContent() {
 
 export default function TeamPage() {
   return (
-    <RequireAuth>
+    <RequireAuth requiredFeature="admin_basic">
       <TeamPageContent />
     </RequireAuth>
   );

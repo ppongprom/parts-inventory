@@ -234,7 +234,7 @@ function GroupsPageContent() {
 
 export default function GroupsPage() {
   return (
-    <RequireAuth allowedRoles={["owner", "manager", "supervisor", "technician", "assistant"]}>
+    <RequireAuth allowedRoles={["owner", "manager", "supervisor", "technician", "assistant"]} requiredFeature="admin_basic">
       <GroupsPageContent />
     </RequireAuth>
   );

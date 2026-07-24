@@ -272,7 +272,7 @@ function ReportsPageContent() {
 
 export default function ReportsPage() {
   return (
-    <RequireAuth allowedRoles={["owner", "manager"]}>
+    <RequireAuth allowedRoles={["owner", "manager"]} requiredFeature="reports">
       <ReportsPageContent />
     </RequireAuth>
   );

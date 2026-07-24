@@ -250,7 +250,7 @@ function BulkUpdatePageContent() {
 
 export default function BulkUpdatePage() {
   return (
-    <RequireAuth allowedRoles={["owner", "manager"]}>
+    <RequireAuth allowedRoles={["owner", "manager"]} requiredFeature="admin_basic">
       <BulkUpdatePageContent />
     </RequireAuth>
   );

@@ -531,7 +531,7 @@ function AdminHubPageContent() {
 
 export default function AdminHubPage() {
   return (
-    <RequireAuth>
+    <RequireAuth requiredFeature="admin_basic">
       <AdminHubPageContent />
     </RequireAuth>
   );

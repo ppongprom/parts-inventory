@@ -4,13 +4,23 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../lib/AuthProvider";
 import { supabase } from "../lib/supabaseClient";
+import { hasFeature } from "../lib/featureGating";
 import IdleSessionGuard from "./IdleSessionGuard";
 import AppShell from "./AppShell";
 import TosConsentGate from "./TosConsentGate";
 
-export default function RequireAuth({ children, allowedRoles }) {
+export default function RequireAuth({ children, allowedRoles, requiredFeature }) {
   const router = useRouter();
-  const { loading, session, memberships, currentRole, signOut, isDisabledAccount, isExpiredAccount } = useAuth();
+  const {
+    loading,
+    session,
+    memberships,
+    currentRole,
+    currentShop,
+    signOut,
+    isDisabledAccount,
+    isExpiredAccount,
+  } = useAuth();
 
   useEffect(() => {
     if (loading) return;
@@ -120,6 +130,19 @@ export default function RequireAuth({ children, allowedRoles }) {
         <div className="msg error">
           บทบาท &quot;{currentRole}&quot; ของคุณไม่มีสิทธิ์เข้าหน้านี้
         </div>
+      </div>
+    );
+  }
+
+  // ⚠️ เช็คหลัง allowedRoles เสมอ — role ผิดควรขึ้นข้อความ role ก่อน ไม่ใช่ข้อความอัปเกรดแพ็กเกจ
+  if (requiredFeature && currentShop && !hasFeature(currentShop.subscription_plan, requiredFeature)) {
+    return (
+      <div className="container" style={{ paddingTop: 60, textAlign: "center" }}>
+        <div style={{ fontSize: 40, marginBottom: 8 }}>🔒</div>
+        <h1 style={{ fontSize: 18, marginBottom: 8 }}>ฟีเจอร์นี้ยังไม่รวมอยู่ในแพ็กเกจปัจจุบัน</h1>
+        <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 20 }}>
+          กรุณาอัปเกรดแพ็กเกจเพื่อใช้งานส่วนนี้
+        </p>
       </div>
     );
   }

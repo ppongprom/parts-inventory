@@ -10,6 +10,14 @@ import { JOB_STATUSES, JOB_STATUS_STYLE, JOB_SOURCE_TYPES } from "../../../lib/j
 import CarDamageDiagram from "../../../components/CarDamageDiagram";
 import JobTypeBundleConfirmModal from "../../../components/JobTypeBundleConfirmModal";
 import CarAutocomplete from "../../../components/CarAutocomplete";
+import { resizeImageFile } from "../../../lib/imageResize";
+import { uploadJobStepPhotos, deletePartPhotoByUrl } from "../../../lib/storageHelpers";
+
+const STEP_PHOTO_CATEGORIES = [
+  { key: "general", label: "สภาพทั่วไป" },
+  { key: "before", label: "ก่อนเปลี่ยน/แก้ไข" },
+  { key: "after", label: "หลังเปลี่ยน/แก้ไข" },
+];
 
 const ROLE_LABELS = {
   owner: "เจ้าของ",
@@ -56,6 +64,10 @@ function JobDetailPageContent() {
   const [deleting, setDeleting] = useState(false);
   const [creatingDoc, setCreatingDoc] = useState(null);
   const [msg, setMsg] = useState(null);
+  // เดิมผูกกับ job.photo_urls ตรงๆ — ตอนนี้ต้องใช้ร่วมกับรูปหลักฐานต่อขั้นตอนงานด้วย เลยแยก
+  // lightboxPhotos ออกมาเป็น array ที่กำลังเปิดดูอยู่ (จะเป็น job.photo_urls หรือรูปของ
+  // step+หมวดไหนก็ได้ แล้วแต่ว่าคลิกเปิดมาจากไหน) — lightboxIndex ยังคงอ้างอิง array นี้เหมือนเดิม
+  const [lightboxPhotos, setLightboxPhotos] = useState(null);
   const [lightboxIndex, setLightboxIndex] = useState(null);
   const [selectedGeneration, setSelectedGeneration] = useState(null);
   const touchStartXRef = useRef(null);
@@ -63,6 +75,11 @@ function JobDetailPageContent() {
   const [groups, setGroups] = useState([]);
   const [jobGroupIds, setJobGroupIds] = useState([]);
   const [workflowSteps, setWorkflowSteps] = useState([]);
+  // การ์ด "รูปหลักฐานต่อขั้นตอนงาน" — { [step_id]: { general: [...], before: [...], after: [...] } }
+  const [stepPhotos, setStepPhotos] = useState({});
+  const [uploadingStepPhotoKey, setUploadingStepPhotoKey] = useState(null); // `${step_id}-${category}`
+  const stepPhotoInputRef = useRef(null);
+  const pendingStepPhotoTargetRef = useRef(null); // { stepId, category } — เลี่ยง stale closure ตอน onChange ของ input
   const [linkedParts, setLinkedParts] = useState([]);
   const [newStepName, setNewStepName] = useState("");
   const [newStepAssignee, setNewStepAssignee] = useState("");
@@ -78,19 +95,20 @@ function JobDetailPageContent() {
       fetchGroups();
       fetchJobGroups();
       fetchWorkflowSteps();
+      fetchStepPhotos();
       fetchLinkedParts();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentShopId, jobId]);
 
   useEffect(() => {
-    if (lightboxIndex === null || !job?.photo_urls?.length) return;
+    if (lightboxIndex === null || !lightboxPhotos?.length) return;
 
     function handleKeyDown(e) {
       if (e.key === "ArrowLeft") {
-        setLightboxIndex((i) => (i - 1 + job.photo_urls.length) % job.photo_urls.length);
+        setLightboxIndex((i) => (i - 1 + lightboxPhotos.length) % lightboxPhotos.length);
       } else if (e.key === "ArrowRight") {
-        setLightboxIndex((i) => (i + 1) % job.photo_urls.length);
+        setLightboxIndex((i) => (i + 1) % lightboxPhotos.length);
       } else if (e.key === "Escape") {
         setLightboxIndex(null);
       }
@@ -99,7 +117,17 @@ function JobDetailPageContent() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lightboxIndex, job?.photo_urls?.length]);
+  }, [lightboxIndex, lightboxPhotos?.length]);
+
+  function openLightbox(photos, index) {
+    setLightboxPhotos(photos);
+    setLightboxIndex(index);
+  }
+
+  function closeLightbox() {
+    setLightboxIndex(null);
+    setLightboxPhotos(null);
+  }
 
   async function fetchLinkedParts() {
     const { data } = await supabase
@@ -151,6 +179,70 @@ function JobDetailPageContent() {
       .eq("job_id", jobId)
       .order("step_order", { ascending: true });
     setWorkflowSteps(data || []);
+  }
+
+  // การ์ด "รูปหลักฐานต่อขั้นตอนงาน" — จัดกลุ่ม 3 หมวดต่อขั้นตอน (สภาพทั่วไป/ก่อน/หลัง) ให้ลูกค้า
+  // ติดตามสถานะซ่อมและเห็นหลักฐานก่อน-หลังเปลี่ยนได้ — ดึงทีเดียวทั้ง job แล้วจัดกลุ่มฝั่ง client
+  // (ต่อ job หนึ่งมีจำนวนรูปไม่เยอะพอที่จะต้อง paginate ต่อ step)
+  async function fetchStepPhotos() {
+    const { data } = await supabase
+      .from("job_step_photos")
+      .select("photo_id, step_id, category, photo_url, created_at")
+      .eq("job_id", jobId)
+      .order("created_at", { ascending: true });
+
+    const grouped = {};
+    for (const row of data || []) {
+      if (!grouped[row.step_id]) grouped[row.step_id] = { general: [], before: [], after: [] };
+      grouped[row.step_id][row.category].push(row);
+    }
+    setStepPhotos(grouped);
+  }
+
+  function triggerStepPhotoUpload(stepId, category) {
+    pendingStepPhotoTargetRef.current = { stepId, category };
+    stepPhotoInputRef.current?.click();
+  }
+
+  async function handleStepPhotoInputChange(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = ""; // เผื่อเลือกไฟล์ชุดเดิมซ้ำ onChange ต้อง fire อีกครั้ง
+    const target = pendingStepPhotoTargetRef.current;
+    pendingStepPhotoTargetRef.current = null;
+    if (!files.length || !target) return;
+
+    const { stepId, category } = target;
+    setUploadingStepPhotoKey(`${stepId}-${category}`);
+    try {
+      const resized = [];
+      for (const file of files) resized.push(await resizeImageFile(file));
+      const urls = await uploadJobStepPhotos(resized, stepId, category);
+      const rows = urls.map((photo_url) => ({
+        step_id: stepId,
+        job_id: jobId,
+        shop_id: currentShopId,
+        category,
+        photo_url,
+        uploaded_by: user?.id || null,
+      }));
+      const { error } = await supabase.from("job_step_photos").insert(rows);
+      if (error) throw error;
+      await fetchStepPhotos();
+    } catch (err) {
+      setMsg({ type: "error", text: "อัปโหลดรูปไม่สำเร็จ: " + err.message });
+    } finally {
+      setUploadingStepPhotoKey(null);
+    }
+  }
+
+  async function handleDeleteStepPhoto(photo) {
+    const { error } = await supabase.from("job_step_photos").delete().eq("photo_id", photo.photo_id);
+    if (error) {
+      setMsg({ type: "error", text: "ลบรูปไม่สำเร็จ: " + error.message });
+      return;
+    }
+    await deletePartPhotoByUrl(photo.photo_url); // best-effort ลบไฟล์ใน storage จริง
+    fetchStepPhotos();
   }
 
   async function handleAddStep() {
@@ -923,130 +1015,130 @@ function JobDetailPageContent() {
       {msg && <div className={`msg ${msg.type}`} style={{ marginBottom: 16 }}>{msg.text}</div>}
 
       {job.photo_urls?.length > 0 && (
-        <>
-          <div className="photo-thumb-row" style={{ marginBottom: 16 }}>
-            {job.photo_urls.map((url, i) => (
-              <div className="photo-thumb" key={i}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={`รูป ${i + 1}`} onClick={() => setLightboxIndex(i)} />
-              </div>
-            ))}
-          </div>
+        <div className="photo-thumb-row" style={{ marginBottom: 16 }}>
+          {job.photo_urls.map((url, i) => (
+            <div className="photo-thumb" key={i}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt={`รูป ${i + 1}`} onClick={() => openLightbox(job.photo_urls, i)} />
+            </div>
+          ))}
+        </div>
+      )}
 
-          {lightboxIndex !== null && (
-            <div
-              onClick={() => setLightboxIndex(null)}
-              onTouchStart={(e) => {
-                touchStartXRef.current = e.touches[0].clientX;
+      {/* lightbox กลาง — ใช้ร่วมกันทั้งรูปตอนรับรถ (job.photo_urls) และรูปหลักฐานต่อขั้นตอนงาน
+         (stepPhotos) เปิดผ่าน openLightbox(photos, index) จากจุดไหนก็ได้ */}
+      {lightboxIndex !== null && lightboxPhotos?.length > 0 && (
+        <div
+          onClick={closeLightbox}
+          onTouchStart={(e) => {
+            touchStartXRef.current = e.touches[0].clientX;
+          }}
+          onTouchEnd={(e) => {
+            if (touchStartXRef.current === null) return;
+            const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+            touchStartXRef.current = null;
+            if (Math.abs(deltaX) < 40) return; // ไม่ใช่การปัด แค่แตะ
+            const len = lightboxPhotos.length;
+            if (deltaX > 0) {
+              setLightboxIndex((i) => (i - 1 + len) % len);
+            } else {
+              setLightboxIndex((i) => (i + 1) % len);
+            }
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.9)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            cursor: "zoom-out",
+            padding: 20,
+          }}
+        >
+          {lightboxPhotos.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxIndex((i) => (i - 1 + lightboxPhotos.length) % lightboxPhotos.length);
               }}
-              onTouchEnd={(e) => {
-                if (touchStartXRef.current === null) return;
-                const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
-                touchStartXRef.current = null;
-                if (Math.abs(deltaX) < 40) return; // ไม่ใช่การปัด แค่แตะ
-                const len = job.photo_urls.length;
-                if (deltaX > 0) {
-                  setLightboxIndex((i) => (i - 1 + len) % len);
-                } else {
-                  setLightboxIndex((i) => (i + 1) % len);
-                }
-              }}
+              aria-label="รูปก่อนหน้า"
               style={{
-                position: "fixed",
-                inset: 0,
-                background: "rgba(0,0,0,0.9)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                zIndex: 100,
-                cursor: "zoom-out",
-                padding: 20,
+                position: "absolute",
+                left: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                border: "none",
+                background: "rgba(255,255,255,0.15)",
+                color: "white",
+                fontSize: 22,
+                cursor: "pointer",
+                zIndex: 101,
               }}
             >
-              {job.photo_urls.length > 1 && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setLightboxIndex((i) => (i - 1 + job.photo_urls.length) % job.photo_urls.length);
-                  }}
-                  aria-label="รูปก่อนหน้า"
-                  style={{
-                    position: "absolute",
-                    left: 12,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    width: 44,
-                    height: 44,
-                    borderRadius: "50%",
-                    border: "none",
-                    background: "rgba(255,255,255,0.15)",
-                    color: "white",
-                    fontSize: 22,
-                    cursor: "pointer",
-                    zIndex: 101,
-                  }}
-                >
-                  ‹
-                </button>
-              )}
+              ‹
+            </button>
+          )}
 
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={job.photo_urls[lightboxIndex]}
-                alt="ขยายรูป"
-                onClick={(e) => e.stopPropagation()}
-                style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8, objectFit: "contain" }}
-              />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightboxPhotos[lightboxIndex]}
+            alt="ขยายรูป"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8, objectFit: "contain" }}
+          />
 
-              {job.photo_urls.length > 1 && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setLightboxIndex((i) => (i + 1) % job.photo_urls.length);
-                  }}
-                  aria-label="รูปถัดไป"
-                  style={{
-                    position: "absolute",
-                    right: 12,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    width: 44,
-                    height: 44,
-                    borderRadius: "50%",
-                    border: "none",
-                    background: "rgba(255,255,255,0.15)",
-                    color: "white",
-                    fontSize: 22,
-                    cursor: "pointer",
-                    zIndex: 101,
-                  }}
-                >
-                  ›
-                </button>
-              )}
+          {lightboxPhotos.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxIndex((i) => (i + 1) % lightboxPhotos.length);
+              }}
+              aria-label="รูปถัดไป"
+              style={{
+                position: "absolute",
+                right: 12,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                border: "none",
+                background: "rgba(255,255,255,0.15)",
+                color: "white",
+                fontSize: 22,
+                cursor: "pointer",
+                zIndex: 101,
+              }}
+            >
+              ›
+            </button>
+          )}
 
-              {job.photo_urls.length > 1 && (
-                <div
-                  style={{
-                    position: "absolute",
-                    bottom: 20,
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    color: "white",
-                    fontSize: 13,
-                    background: "rgba(0,0,0,0.5)",
-                    padding: "4px 12px",
-                    borderRadius: 20,
-                  }}
-                >
-                  {lightboxIndex + 1} / {job.photo_urls.length}
-                </div>
-              )}
+          {lightboxPhotos.length > 1 && (
+            <div
+              style={{
+                position: "absolute",
+                bottom: 20,
+                left: "50%",
+                transform: "translateX(-50%)",
+                color: "white",
+                fontSize: 13,
+                background: "rgba(0,0,0,0.5)",
+                padding: "4px 12px",
+                borderRadius: 20,
+              }}
+            >
+              {lightboxIndex + 1} / {lightboxPhotos.length}
             </div>
           )}
-        </>
+        </div>
       )}
 
       <form onSubmit={handleSave}>
@@ -1430,8 +1522,90 @@ function JobDetailPageContent() {
             >
               ลบ
             </button>
+
+            {/* รูปหลักฐานต่อขั้นตอนงาน — 3 หมวด: สภาพทั่วไป/ก่อนเปลี่ยน/หลังเปลี่ยน ให้ลูกค้าติดตาม
+               สถานะซ่อมและเห็นหลักฐานก่อน-หลังผ่านหน้าแชร์ (app/share/customer/.../job/[jobId]) */}
+            <div style={{ flexBasis: "100%", marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+              {STEP_PHOTO_CATEGORIES.map((cat) => {
+                const photos = stepPhotos[step.step_id]?.[cat.key] || [];
+                const uploadKey = `${step.step_id}-${cat.key}`;
+                const photoUrls = photos.map((p) => p.photo_url);
+                return (
+                  <div key={cat.key} style={{ display: "flex", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", width: 90, flexShrink: 0, paddingTop: 6 }}>
+                      {cat.label}
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", flex: 1 }}>
+                      {photos.map((photo, i) => (
+                        <div key={photo.photo_id} className="photo-thumb" style={{ position: "relative", width: 56, height: 56 }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={photo.photo_url}
+                            alt={`${cat.label} ${i + 1}`}
+                            style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 6, cursor: "pointer" }}
+                            onClick={() => openLightbox(photoUrls, i)}
+                          />
+                          {canActOnStep(step) && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteStepPhoto(photo)}
+                              aria-label="ลบรูป"
+                              style={{
+                                position: "absolute",
+                                top: -6,
+                                right: -6,
+                                width: 18,
+                                height: 18,
+                                borderRadius: "50%",
+                                border: "none",
+                                background: "var(--danger-text)",
+                                color: "white",
+                                fontSize: 11,
+                                lineHeight: "18px",
+                                padding: 0,
+                                cursor: "pointer",
+                              }}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {canActOnStep(step) && (
+                        <button
+                          type="button"
+                          onClick={() => triggerStepPhotoUpload(step.step_id, cat.key)}
+                          disabled={uploadingStepPhotoKey === uploadKey}
+                          style={{
+                            width: 56,
+                            height: 56,
+                            borderRadius: 6,
+                            border: "1px dashed var(--border-strong)",
+                            background: "var(--surface)",
+                            color: "var(--text-muted)",
+                            fontSize: 18,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {uploadingStepPhotoKey === uploadKey ? "…" : "+"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ))}
+
+        <input
+          ref={stepPhotoInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleStepPhotoInputChange}
+          style={{ display: "none" }}
+        />
 
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <input

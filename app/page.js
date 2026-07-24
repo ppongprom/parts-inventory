@@ -8,6 +8,7 @@ import { getViewMode, setViewMode } from "../lib/viewModeStorage";
 import { useAuth } from "../lib/AuthProvider";
 import RequireAuth from "../components/RequireAuth";
 import { ROLE_PERMISSIONS } from "../config/rolePermissions";
+import { hasFeature } from "../lib/featureGating";
 import { getDescendantIds, formatBreadcrumb, getSortedZoneList } from "../lib/zoneHelpers";
 
 const PAGE_SIZE = 50;
@@ -36,6 +37,7 @@ function HomePageContent() {
   const [selectMode, setSelectMode] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const canSell = ROLE_PERMISSIONS[currentRole]?.sell_parts ?? false;
+  const canUseGallery = hasFeature(currentShop?.subscription_plan, "gallery_view");
 
   const [search, setSearch] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
@@ -50,6 +52,16 @@ function HomePageContent() {
   useEffect(() => {
     setViewModeState(getViewMode());
   }, []);
+
+  // เผื่อ shop ถูกลดแพ็กเกจหลังเคยเซฟ viewMode="gallery" ไว้ใน localStorage — ปุ่ม Gallery ถูกซ่อนแล้ว
+  // แต่ localStorage เดิมยังชี้ไปโหมด gallery ค้างอยู่ ต้องบังคับกลับ list ไม่งั้นเข้าหน้าแรกไม่เห็นอะไรเลย
+  useEffect(() => {
+    if (!currentShop) return;
+    if (!canUseGallery && viewMode === "gallery") {
+      handleViewModeChange("list");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentShop, canUseGallery, viewMode]);
 
   useEffect(() => {
     if (!currentShopId) return;
@@ -158,9 +170,11 @@ function HomePageContent() {
           <Link href="/jobs" className="nav-link secondary">
             🔧 งานเข้าอู่
           </Link>
-          <Link href="/admin" className="nav-link secondary">
-            ⚙️ ตั้งค่า
-          </Link>
+          {hasFeature(currentShop?.subscription_plan, "admin_basic") && (
+            <Link href="/admin" className="nav-link secondary">
+              ⚙️ ตั้งค่า
+            </Link>
+          )}
           <Link href="/add" className="nav-link">
             + เพิ่มอะไหล่
           </Link>
@@ -245,13 +259,15 @@ function HomePageContent() {
           >
             📃 List
           </button>
-          <button
-            type="button"
-            className={viewMode === "gallery" ? "active" : ""}
-            onClick={() => handleViewModeChange("gallery")}
-          >
-            🖼 Gallery
-          </button>
+          {canUseGallery && (
+            <button
+              type="button"
+              className={viewMode === "gallery" ? "active" : ""}
+              onClick={() => handleViewModeChange("gallery")}
+            >
+              🖼 Gallery
+            </button>
+          )}
         </div>
         <button
           type="button"

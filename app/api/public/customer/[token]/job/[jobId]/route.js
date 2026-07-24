@@ -58,6 +58,34 @@ export async function GET(request, { params }) {
 
     const total = (costItems || []).reduce((sum, c) => sum + Number(c.amount || 0), 0);
 
+    // การ์ด "รูปหลักฐานต่อขั้นตอนงาน" — ให้ลูกค้าติดตามสถานะซ่อม + เห็นหลักฐานก่อน/หลังเปลี่ยน
+    // ผ่านหน้าแชร์นี้โดยตรง (จุดประสงค์หลักของฟีเจอร์นี้อยู่ที่นี่ ไม่ใช่แค่หน้าแอดมิน)
+    const { data: workflowSteps, error: stepsError } = await supabaseAdmin
+      .from("job_workflow_steps")
+      .select("step_id, step_name, status, step_order")
+      .eq("job_id", jobId)
+      .order("step_order", { ascending: true });
+
+    if (stepsError) throw stepsError;
+
+    const { data: stepPhotos, error: stepPhotosError } = await supabaseAdmin
+      .from("job_step_photos")
+      .select("photo_id, step_id, category, photo_url, created_at")
+      .eq("job_id", jobId)
+      .order("created_at", { ascending: true });
+
+    if (stepPhotosError) throw stepPhotosError;
+
+    const photosByStep = {};
+    for (const p of stepPhotos || []) {
+      if (!photosByStep[p.step_id]) photosByStep[p.step_id] = { general: [], before: [], after: [] };
+      photosByStep[p.step_id][p.category].push(p.photo_url);
+    }
+    const stepsWithPhotos = (workflowSteps || []).map((s) => ({
+      ...s,
+      photos: photosByStep[s.step_id] || { general: [], before: [], after: [] },
+    }));
+
     return NextResponse.json({
       data: {
         shop_name: shop?.company_name || shop?.shop_name || "",
@@ -65,6 +93,7 @@ export async function GET(request, { params }) {
         job,
         cost_items: costItems || [],
         total,
+        workflow_steps: stepsWithPhotos,
       },
     });
   } catch (err) {

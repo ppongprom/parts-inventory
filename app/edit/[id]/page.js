@@ -13,6 +13,7 @@ import { resizeImageFile } from "../../../lib/imageResize";
 import { uploadPartPhotos } from "../../../lib/storageHelpers";
 import { useAuth } from "../../../lib/AuthProvider";
 import RequireAuth from "../../../components/RequireAuth";
+import { hasFeature } from "../../../lib/featureGating";
 
 // การ์ด "บันทึกวิธีชำระเงินแยกทุกช่องทาง (payment_method)" — ✅ ตัดสินใจแล้ว: แยกทุกช่องทาง
 // ไม่รวมเป็น category เดียว (ผูกกับบัญชีเงินสด/ธนาคารคนละบัญชีตามผังบัญชี)
@@ -29,7 +30,8 @@ function EditPartPageContent() {
   const { id } = params;
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
-  const { currentShopId, currentRole, user } = useAuth();
+  const { currentShopId, currentShop, currentRole, user } = useAuth();
+  const canUseMultiPhoto = hasFeature(currentShop?.subscription_plan, "multi_photo");
 
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(null);
@@ -467,28 +469,30 @@ function EditPartPageContent() {
             >
               📷 {processingPhoto ? "กำลังประมวลผล..." : "ถ่ายรูป"}
             </button>
-            <button
-              type="button"
-              onClick={() => galleryInputRef.current?.click()}
-              disabled={processingPhoto}
-              style={{
-                flex: 1,
-                padding: 14,
-                borderRadius: 8,
-                border: "1px dashed var(--border-strong)",
-                background: "var(--surface)",
-                color: "var(--text)",
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-              }}
-            >
-              🖼️ {processingPhoto ? "กำลังประมวลผล..." : "เลือกจากคลังภาพ"}
-            </button>
+            {canUseMultiPhoto && (
+              <button
+                type="button"
+                onClick={() => galleryInputRef.current?.click()}
+                disabled={processingPhoto}
+                style={{
+                  flex: 1,
+                  padding: 14,
+                  borderRadius: 8,
+                  border: "1px dashed var(--border-strong)",
+                  background: "var(--surface)",
+                  color: "var(--text)",
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                }}
+              >
+                🖼️ {processingPhoto ? "กำลังประมวลผล..." : "เลือกจากคลังภาพ"}
+              </button>
+            )}
           </div>
         </div>
 

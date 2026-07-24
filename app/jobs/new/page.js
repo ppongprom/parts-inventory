@@ -11,10 +11,12 @@ import CarDamageDiagram from "../../../components/CarDamageDiagram";
 import { resizeImageFile } from "../../../lib/imageResize";
 import { uploadJobPhotos } from "../../../lib/storageHelpers";
 import { JOB_SOURCE_TYPES } from "../../../lib/jobStatusLabels";
+import { hasFeature } from "../../../lib/featureGating";
 
 function NewJobPageContent() {
   const router = useRouter();
   const { currentShopId, currentShop, user } = useAuth();
+  const canUseMultiPhoto = hasFeature(currentShop?.subscription_plan, "multi_photo");
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
 
@@ -330,23 +332,25 @@ function NewJobPageContent() {
             >
               📷 {processingPhoto ? "กำลังประมวลผล..." : "ถ่ายรูป"}
             </button>
-            <button
-              type="button"
-              onClick={() => galleryInputRef.current?.click()}
-              disabled={processingPhoto}
-              style={{
-                flex: 1,
-                padding: 14,
-                borderRadius: 8,
-                border: "1px dashed var(--border-strong)",
-                background: "var(--surface)",
-                color: "var(--text)",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              🖼️ เลือกจากคลังภาพ
-            </button>
+            {canUseMultiPhoto && (
+              <button
+                type="button"
+                onClick={() => galleryInputRef.current?.click()}
+                disabled={processingPhoto}
+                style={{
+                  flex: 1,
+                  padding: 14,
+                  borderRadius: 8,
+                  border: "1px dashed var(--border-strong)",
+                  background: "var(--surface)",
+                  color: "var(--text)",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                🖼️ เลือกจากคลังภาพ
+              </button>
+            )}
           </div>
         </div>
 

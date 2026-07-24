@@ -448,7 +448,7 @@ function ZonesAdminPageContent() {
 
 export default function ZonesAdminPage() {
   return (
-    <RequireAuth allowedRoles={["owner", "manager"]}>
+    <RequireAuth allowedRoles={["owner", "manager"]} requiredFeature="admin_basic">
       <ZonesAdminPageContent />
     </RequireAuth>
   );

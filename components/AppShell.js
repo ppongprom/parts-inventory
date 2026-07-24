@@ -5,13 +5,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "../lib/AuthProvider";
 import { useTheme } from "../lib/ThemeProvider";
+import { hasFeature } from "../lib/featureGating";
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { href: "/jobs", label: "งานเข้าอู่", icon: "🔧" },
   { href: "/", label: "สต็อกอะไหล่", icon: "📦" },
   { href: "/salvage-vehicles", label: "ซากรถ", icon: "🚗" },
-  { href: "/admin", label: "ตั้งค่า", icon: "⚙️" },
 ];
+
+const ADMIN_ITEM = { href: "/admin", label: "ตั้งค่า", icon: "⚙️" };
 
 const REPORTS_ITEM = { href: "/admin/reports", label: "รายงานการขาย", icon: "📊" };
 
@@ -43,8 +45,15 @@ export default function AppShell({ children, title }) {
   const { currentShop, currentShopId, memberships, switchShop, currentRole, signOut, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
-  const canSeeReports = currentRole === "owner" || currentRole === "manager";
-  const navItems = canSeeReports ? [...NAV_ITEMS, REPORTS_ITEM] : NAV_ITEMS;
+  const canSeeAdmin = hasFeature(currentShop?.subscription_plan, "admin_basic");
+  const canSeeReports =
+    (currentRole === "owner" || currentRole === "manager") &&
+    hasFeature(currentShop?.subscription_plan, "reports");
+  const navItems = [
+    ...BASE_NAV_ITEMS,
+    ...(canSeeAdmin ? [ADMIN_ITEM] : []),
+    ...(canSeeReports ? [REPORTS_ITEM] : []),
+  ];
   const hasMultipleShops = memberships.length > 1;
 
   return (

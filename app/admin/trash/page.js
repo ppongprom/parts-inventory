@@ -162,7 +162,7 @@ function TrashAdminPageContent() {
 
 export default function TrashAdminPage() {
   return (
-    <RequireAuth allowedRoles={["owner", "manager"]}>
+    <RequireAuth allowedRoles={["owner", "manager"]} requiredFeature="admin_basic">
       <TrashAdminPageContent />
     </RequireAuth>
   );

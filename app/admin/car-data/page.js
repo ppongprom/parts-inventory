@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabaseClient";
+import { useAuth } from "../../../lib/AuthProvider";
 import RequireAuth from "../../../components/RequireAuth";
+import { hasFeature } from "../../../lib/featureGating";
 
 async function getAuthHeaders() {
   const {
@@ -27,6 +29,9 @@ const emptyGenForm = {
 };
 
 function CarDataAdminPageContent() {
+  const { currentShop } = useAuth();
+  const canSeeAuditLog = hasFeature(currentShop?.subscription_plan, "audit_log");
+
   const [brands, setBrands] = useState([]);
   const [selectedBrandId, setSelectedBrandId] = useState("");
   const [newBrandName, setNewBrandName] = useState("");
@@ -370,21 +375,23 @@ function CarDataAdminPageContent() {
                   >
                     แก้ไข
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => toggleAudit(gen.generation_id)}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 8,
-                      border: "1px solid var(--border-strong)",
-                      background: "var(--surface)",
-                      color: "var(--link)",
-                      fontSize: 12,
-                      cursor: "pointer",
-                    }}
-                  >
-                    📜 ประวัติ
-                  </button>
+                  {canSeeAuditLog && (
+                    <button
+                      type="button"
+                      onClick={() => toggleAudit(gen.generation_id)}
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: 8,
+                        border: "1px solid var(--border-strong)",
+                        background: "var(--surface)",
+                        color: "var(--link)",
+                        fontSize: 12,
+                        cursor: "pointer",
+                      }}
+                    >
+                      📜 ประวัติ
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -589,7 +596,7 @@ function CarDataAdminPageContent() {
 
 export default function CarDataAdminPage() {
   return (
-    <RequireAuth allowedRoles={["owner", "manager"]}>
+    <RequireAuth allowedRoles={["owner", "manager"]} requiredFeature="admin_basic">
       <CarDataAdminPageContent />
     </RequireAuth>
   );

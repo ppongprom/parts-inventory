@@ -14,6 +14,7 @@ import { uploadPartPhotos } from "../../lib/storageHelpers";
 import { useAuth } from "../../lib/AuthProvider";
 import RequireAuth from "../../components/RequireAuth";
 import { saveRecoveryState, loadRecoveryState, clearRecoveryState } from "../../lib/addFormRecovery";
+import { hasFeature } from "../../lib/featureGating";
 
 function AddPartPageContent() {
   const router = useRouter();
@@ -23,7 +24,8 @@ function AddPartPageContent() {
   const linkedSalvageVehicleId = searchParams.get("salvage_vehicle_id");
   const cameraInputRef = useRef(null);
   const galleryInputRef = useRef(null);
-  const { currentShopId, currentRole } = useAuth();
+  const { currentShopId, currentShop, currentRole } = useAuth();
+  const canUseMultiPhoto = hasFeature(currentShop?.subscription_plan, "multi_photo");
   // การ์ด "Salvage vehicle cost allocation" — floor เดียวกับราคาทุน (Owner/Manager/Supervisor)
   // ต่างจาก field อื่นในฟอร์มนี้ที่ไม่ซ่อนตาม role (ปล่อยให้ API/RLS ปฏิเสธแทน) เพราะ estimated_value
   // ถูก enforce ด้วย RESTRICTIVE RLS policy ระดับ "ทั้งแถว" — ถ้าส่งค่าไปทั้งที่ไม่มีสิทธิ์ การบันทึก
@@ -365,28 +367,30 @@ function AddPartPageContent() {
             >
               📷 {processingPhoto ? "กำลังประมวลผล..." : "ถ่ายรูป"}
             </button>
-            <button
-              type="button"
-              onClick={() => galleryInputRef.current?.click()}
-              disabled={processingPhoto}
-              style={{
-                flex: 1,
-                padding: 14,
-                borderRadius: 8,
-                border: "1px dashed var(--border-strong)",
-                background: "var(--surface)",
-                color: "var(--text)",
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-              }}
-            >
-              🖼️ {processingPhoto ? "กำลังประมวลผล..." : "เลือกจากคลังภาพ"}
-            </button>
+            {canUseMultiPhoto && (
+              <button
+                type="button"
+                onClick={() => galleryInputRef.current?.click()}
+                disabled={processingPhoto}
+                style={{
+                  flex: 1,
+                  padding: 14,
+                  borderRadius: 8,
+                  border: "1px dashed var(--border-strong)",
+                  background: "var(--surface)",
+                  color: "var(--text)",
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                }}
+              >
+                🖼️ {processingPhoto ? "กำลังประมวลผล..." : "เลือกจากคลังภาพ"}
+              </button>
+            )}
           </div>
         </div>
 
