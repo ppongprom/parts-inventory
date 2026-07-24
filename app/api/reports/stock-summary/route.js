@@ -3,6 +3,7 @@ import { supabaseAdmin } from "../../../../lib/supabaseAdminClient";
 import { verifyCaller } from "../../../../lib/teamAuth";
 import { getTierConfig } from "../../../../config/subscriptionTiers";
 import { REPORTING_THRESHOLDS } from "../../../../config/reportingThresholds";
+import { canSeeField } from "../../../../config/fieldVisibility";
 
 // Card: "รายงานสรุปสต็อก (Stock Summary Report) — Pro+" (Notion 3a1f39f4564981d1a15ed167dcd8031b)
 //
@@ -63,13 +64,21 @@ export async function GET(request) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึงอู่นี้" }, { status: 403 });
     }
 
-    // Role gate — matches app/admin/reports/page.js's RequireAuth allowedRoles exactly
-    if (!["owner", "manager"].includes(callerMember.role)) {
-      return NextResponse.json(
-        { error: "เฉพาะเจ้าของ/ผู้จัดการเท่านั้นที่ดูรายงานนี้ได้" },
-        { status: 403 }
-      );
+    // การ์ด "Field Visibility Whitelist กลาง (role × field group)" — retrofit: role gate ก่อน
+    // หน้านี้ hardcode ["owner","manager"] เอง (คอมเมนต์เดิมบอกว่า "matches
+    // app/admin/reports/page.js exactly") — ตอนนี้ทั้งคู่อ้าง matrix กลางเดียวกันแทน
+    // (field group "sales_reports" — default: owner/manager/supervisor ✅, admin ✅ เหมือน
+    // supervisor, technician/assistant/field_scanner ❌) — ห้ามกำหนดแยกรายฟีเจอร์ตามกติกาข้อ 2
+    const { data: overrides } = await supabaseAdmin
+      .from("shop_field_visibility_overrides")
+      .select("role, field_group, allowed")
+      .eq("shop_id", shopId);
+
+    if (!canSeeField(callerMember.role, "sales_reports", overrides || [])) {
+      return NextResponse.json({ error: "ไม่มีสิทธิ์ดูรายงานนี้" }, { status: 403 });
     }
+
+    const canSeeCostPrice = canSeeField(callerMember.role, "cost_price", overrides || []);
 
     const { data: shop } = await supabaseAdmin
       .from("shops")
@@ -220,7 +229,10 @@ export async function GET(request) {
         condition: p.condition,
         createdAt: p.created_at,
         origin: p.salvage_vehicle_id ? "salvage" : "direct",
-        costValue: Number(p.allocated_cost ?? p.price ?? 0) * Number(p.quantity ?? 0),
+        // Field Visibility Whitelist: allocated_cost/ราคาทุน คนละ field group กับ sales_reports
+        // เอง (cost_price) — role ที่ผ่าน gate ข้างบนแล้ว (เห็นรายงานได้) อาจถูก shop override
+        // ปิด cost_price แยกไว้ก็ได้ ถ้าเป็นแบบนั้น mask ค่านี้เป็น null แทนตัวเลขจริง
+        costValue: canSeeCostPrice ? Number(p.allocated_cost ?? p.price ?? 0) * Number(p.quantity ?? 0) : null,
       }));
 
     const section4 = {

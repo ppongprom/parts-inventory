@@ -229,7 +229,7 @@ function StockSummaryReportContent() {
 
 export default function StockSummaryReportPage() {
   return (
-    <RequireAuth allowedRoles={["owner", "manager"]}>
+    <RequireAuth allowedRoles={["owner", "manager", "supervisor", "admin"]}>
       <StockSummaryReportContent />
     </RequireAuth>
   );
