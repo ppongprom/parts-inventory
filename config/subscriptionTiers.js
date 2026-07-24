@@ -13,8 +13,8 @@
 
 export const GLOBAL_SESSION_CONFIG = {
   maxDevicesPerUser: 4,
-  idleTimeoutMinutes: 15,        // ไม่มีกิจกรรมเกินเท่านี้ -> เริ่มนับถอยหลัง
-  idleWarningCountdownSeconds: 100, // เวลานับถอยหลังก่อน logout อัตโนมัติ
+  idleTimeoutMinutes: 360,        // ไม่มีกิจกรรมเกินเท่านี้ -> เริ่มนับถอยหลัง
+  idleWarningCountdownSeconds: 603, // เวลานับถอยหลังก่อน logout อัตโนมัติ
   sessionStaleAfterMinutes: 3, // แถวใน user_sessions ที่ last_seen_at เก่ากว่านี้ถือว่าเป็น
                                 // "session ผี" (ปิดแท็บ/แอปมือถือ/เน็ตหลุดโดยไม่ผ่าน beforeunload)
                                 // ไม่นับใน concurrent session limit และถูกเก็บกวาดทิ้งอัตโนมัติ

@@ -1,10 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { loginWithEmail, expectLoginSucceeded, signOut } from "../fixtures/auth-helpers.js";
 import { accounts } from "../fixtures/test-data.js";
+import { GLOBAL_SESSION_CONFIG } from "../../config/subscriptionTiers.js";
 
-// ค่าจริงจาก config/subscriptionTiers.js -> GLOBAL_SESSION_CONFIG
-const IDLE_TIMEOUT_MINUTES = 15;
-const WARNING_COUNTDOWN_SECONDS = 100;
+const IDLE_TIMEOUT_MINUTES = GLOBAL_SESSION_CONFIG.idleTimeoutMinutes;
+const WARNING_COUNTDOWN_SECONDS = GLOBAL_SESSION_CONFIG.idleWarningCountdownSeconds;
 
 test.describe("Session — Idle timeout (lib/useIdleTimeout.js + components/IdleLogoutModal.js)", () => {
   // TC-301
