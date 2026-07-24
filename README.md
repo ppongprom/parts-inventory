@@ -1286,3 +1286,80 @@ test เดิมกับ deployment **ก่อน** commit ของ middlewa
 systemd service, ไม่ gate `/share/customer/[token]/**` โดยไม่ตั้งใจ (ตรวจแล้วว่ายังเข้าได้ปกติทั้ง
 page และ API), push ผ่าน `git pull --rebase` ตอนโดน reject จาก commit คู่ขนานของงาน Multi-branch
 (ไม่ใช้ force push)
+
+### 30. คืนวันที่ 24 ก.ค. 2026 — Supabase Security Advisor batch: ปิด RLS bypass บน `parts` +
+accounting RPC ไม่เช็คสิทธิ์ + hygiene grants/search_path/storage
+
+ที่มา: Notion card `3a7f39f45649817c85a3c1e2feca40dc` ("🔴 P0: Supabase Security Advisor batch") —
+รัน `get_advisors(type=security)` บน staging (`qmqabtrrubqcmafietsr`) ก่อนเริ่มงานจริงพบ 123
+findings (ต่างจากตัวเลข "70+" ที่การ์ดเขียนไว้ตอนเช้า เพราะ Multi-branch support + Accounting
+Module landed schema เพิ่มระหว่างวัน) — ส่วนใหญ่เป็น hygiene noise แต่ 2 รายการยืนยันแล้วว่า
+exploit ได้จริงด้วย live PoC บน staging (rollback ทุกครั้ง ไม่มีอะไรค้างจริง):
+
+**P0-1 (RLS):** policy `"estimated_value floor on insert/update"` บนตาราง `parts` เป็น PERMISSIVE
+แทนที่จะเป็น RESTRICTIVE ที่ตั้งใจไว้ — Postgres รวม PERMISSIVE ด้วย OR ทำให้ floor (จำกัดว่าต้องเป็น
+owner/manager/supervisor/admin ถึงจะตั้ง `estimated_value` ได้) ไม่บังคับใช้เลย ยืนยันด้วย live PoC:
+technician ตั้งค่านี้ในอะไหล่ของอู่ตัวเองผ่านได้ตรงๆ — ประวัติที่มา: เคยถูกแก้ถูกต้องเป็น
+`as restrictive` แล้วครั้งหนึ่งใน `salvage_vehicle_cost_allocation_migration.sql` แต่ถูก
+`multi_branch_support_migration.sql` (section 9, ที่มีคอมเมนต์พูดถึงบั๊กคลาสเดียวกันนี้ตรงๆ
+ประชดในตัว) DROP+CREATE ใหม่แบบไม่มี `as restrictive` ตอนเพิ่ม branch_id clause เข้าไป จึง regress
+กลับไปเป็น PERMISSIVE โดยไม่ตั้งใจ — แก้กลับเป็น RESTRICTIVE (คง branch_id clause เดิมไว้ครบ)
+
+**P0-2 (RPC authorization):** 5 ฟังก์ชัน `SECURITY DEFINER` ในโมดูลบัญชี
+(`fn_insert_system_journal_entry`, `fn_get_or_open_period`, `fn_backfill_current_period_sales`,
+`fn_recalc_stock_cap_status`, `fn_seed_default_chart_of_accounts`) รับ `p_shop_id` จากผู้เรียกตรงๆ
+โดยไม่เช็ค `is_shop_member()` เลย ยืนยันด้วย live PoC: technician ร้าน A ยิง RPC ตรงใส่ `p_shop_id`
+ร้าน B สำเร็จ ทั้งฉีด journal entry ปลอม ฿9,999,999 เข้าบัญชีร้านอื่น และเปิดงวดบัญชีใหม่ให้ร้านอื่น
+— เติม `is_shop_member()` check ทุกตัว โดย role-set ต่อฟังก์ชันอิงจาก **caller จริงของฟังก์ชันนั้น**
+ไม่ใช่ copy จาก `close_accounting_period` เหมือนกันหมด (ดูเหตุผลละเอียดใน SOP.md ส่วน
+"Security Advisor batch" และคอมเมนต์ในไฟล์ migration) — 3 ใน 5 ฟังก์ชัน
+(`fn_insert_system_journal_entry`/`fn_get_or_open_period`/`fn_recalc_stock_cap_status`) ถูกเรียกจาก
+trigger chain ที่ทำงานได้ทั้งจาก end-user จริงและจาก service-role เขียนตรง (`auth.uid()` เป็น null)
+— ใช้ `auth.uid() is not null and not is_shop_member(...)` แทน blanket check เพื่อไม่พัง
+service-role-driven flow พร้อม revoke EXECUTE จาก `anon` เพิ่มเพื่อปิดช่องที่ auth.uid() เป็น null
+ได้เหมือนกันสำหรับผู้ใช้ที่ไม่ login เลย
+
+**P1 (revoke grants + search_path):** revoke EXECUTE ฟังก์ชัน trigger-only 7 ตัวตามการ์ด + 1 ตัว
+เพิ่มที่เจอระหว่างตรวจ (`trg_autofill_branch_id`, มาจาก Multi-branch support หลังการ์ดเขียนเสร็จ)
+จาก `anon`/`authenticated` — พบว่า `revoke ... from anon, authenticated` เฉยๆ **ไม่พอ** เพราะฟังก์ชัน
+เหล่านี้ grant ให้ PUBLIC มาตั้งแต่สร้าง (default ของ Postgres) ต้อง `revoke ... from PUBLIC, anon,
+authenticated` เสมอ (ตรงกับ convention ที่ `db/car_data_rpc_revoke_public_access_migration.sql`
+วางไว้แล้ว) ยืนยันผลทุกครั้งด้วย `has_function_privilege()` ไม่ใช่แค่เชื่อว่า statement รันผ่าน — และ
+`alter function ... set search_path = public` ให้ครบ 18 ฟังก์ชันตาม advisor list ปัจจุบัน (ไม่ใช่
+list เดิมจากการ์ด เพราะมีฟังก์ชันจาก Multi-branch support เพิ่มมา ตรวจ signature จริงก่อนรันทุกตัว)
+
+**P2 (ทำ):** ตัด policy `"Allow public read photos"` บน `storage.objects` (bucket `part-photos`)
+ออก — bucket เป็น public bucket อยู่แล้ว (`getPublicUrl()` bypass RLS ตรงๆ ผ่าน endpoint
+`/storage/v1/object/public/...` โดยไม่ต้องมี policy เลย) โค้ดแอปจริงก็ไม่เคยเรียก `.list()` เลย
+policy เดิมให้แค่สิทธิ์ enumerate ไฟล์ทั้ง bucket เท่านั้นที่ตัดออกไปได้โดยไม่กระทบอะไร
+
+**P2 (ไม่ทำรอบนี้, ตั้งใจ):** ย้าย `ltree` extension ออกจาก `public` schema — extension นี้ติดตั้ง
+operator/function ทั้งชุด (60+ objects) ไว้ใน `public` ไม่ใช่แค่ type ย้ายจริงต้องปรับ `search_path`
+ของ `zones_set_path`/`zones_update_path` เป็น `public, extensions` คู่กันในการ์ดเดียว เสี่ยงพังฟีเจอร์
+zone hierarchy ถ้าไม่มี test window แยก — แนะนำเปิดการ์ดใหม่ทำเฉพาะเรื่องนี้ + เปิด "Leaked password
+protection" ต้องทำผ่าน Supabase Dashboard เอง (ไม่มี dashboard UI access จาก environment นี้)
+
+**Migration:** `db/security_advisor_batch_fixes_migration.sql` (idempotent, มีเหตุผลของ
+role-set/PUBLIC-grant/auth.uid()-null ต่อฟังก์ชันอธิบายไว้ในไฟล์ครบ)
+
+**Test:** `qa-automation/tests/security-advisor-batch-fixes.spec.js` (ใหม่, 14 tests) —
+cross-shop parts write (INSERT+UPDATE) ถูกบล็อกจริง, cross-shop journal injection/period-open/
+backfill/recalc/seed ถูกบล็อกจริงทั้ง 5 ฟังก์ชัน, ผู้ใช้ไม่ login เลย (anon key เปล่า) ถูกบล็อกที่
+grant level, positive control ของทุก role ที่ควรผ่านยังผ่านปกติ (รวม technician/assistant ที่ยัง
+ต้องบันทึกยอดขายได้ตามปกติ) — ผ่านหมดบน staging จริง ก่อน/หลัง `get_advisors` ยืนยัน finding ที่แก้
+หายไปครบ (`function_search_path_mutable`, `rls_policy_always_true`,
+`public_bucket_allows_listing` = 0 รายการ) รวม 123 -> 80 findings
+
+**Regression sweep:** `accounting-module-core.spec.js` (12/12 — พบ+แก้ regression ระหว่างทาง: เช็ค
+แบบ blanket พัง ACC-004 เพราะ insert `part_sales` ผ่าน service role มี `auth.uid()` null ก่อนแก้เป็น
+`auth.uid() is not null and ...`), `db-rls.spec.js` (9/9), `stock-summary-report.spec.js` (11/11),
+`multi-branch-support.spec.js` (10/11, 1 fail ไม่เกี่ยวข้อง — ดูล่าง)
+
+**Known, ไม่เกี่ยวข้องกัน (ยืนยันแล้ว):** `multi-branch-support.spec.js` TC-MB-3a fail ด้วย
+`AuthApiError: invalid JWT ... unrecognized JWT kid` ตอนเรียก `auth.admin.createUser()` — ปัญหา JWT
+signing key ของ environment เอง (เห็น warning เดียวกันซ้ำๆ ใน global-setup ทุกรัน ทั้งก่อนและระหว่าง
+การแก้ครั้งนี้ ไม่ใช่ผลจาก migration นี้)
+
+**Constraint ที่ทำตาม:** ไม่แตะ branch `main`/production systemd service (การ์ดยืนยันเองว่าเป็น
+staging-only exposure), ทุก live PoC รันใน transaction แล้ว rollback เสมอ ไม่มีข้อมูลค้าง, ไม่ force
+push
