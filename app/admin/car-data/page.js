@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabaseClient";
 import RequireAuth from "../../../components/RequireAuth";
+import { SESSION_ID_HEADER, getStoredSessionId } from "../../../lib/sessionTracking";
 
 async function getAuthHeaders() {
   const {
@@ -12,6 +13,7 @@ async function getAuthHeaders() {
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${session?.access_token}`,
+    [SESSION_ID_HEADER]: getStoredSessionId() || "",
   };
 }
 

@@ -21,6 +21,14 @@ export async function getAccessToken(page) {
   });
 }
 
+/** ดึง session_id ปัจจุบัน (การ์ด "Concurrent session eviction ไม่ invalidate JWT จริง") จาก
+ *  sessionStorage — ดู lib/sessionTracking.js getStoredSessionId()/SESSION_ID_HEADER สำหรับ
+ *  ที่มา ค่านี้แนบไปกับทุก API call ที่ผ่าน lib/teamAuth.js verifyCaller() เป็น header x-session-id
+ *  เพื่อให้ server เช็คได้ว่าแถวใน user_sessions ของ session นี้ยังอยู่จริงไหมก่อนเชื่อ JWT */
+export async function getStoredSessionId(page) {
+  return await page.evaluate(() => window.sessionStorage.getItem("pi_session_id"));
+}
+
 /**
  * เข้า /admin/team แล้วดัก request ที่แอปยิงไป /api/team/list-with-emails เอง
  * เพื่อดึง shop_id (ไม่ต้อง hardcode) และรายชื่อสมาชิกทั้งหมดของอู่นั้น

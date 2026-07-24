@@ -5,6 +5,7 @@ import Link from "next/link";
 import { supabase } from "../../../lib/supabaseClient";
 import { useAuth } from "../../../lib/AuthProvider";
 import RequireAuth from "../../../components/RequireAuth";
+import { SESSION_ID_HEADER, getStoredSessionId } from "../../../lib/sessionTracking";
 
 const ROLE_LABELS = {
   owner: "เจ้าของ",
@@ -93,6 +94,7 @@ function TeamPageContent() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
+          [SESSION_ID_HEADER]: getStoredSessionId() || "",
         },
         body: JSON.stringify({ shop_id: currentShopId }),
       }).then((r) => r.json()),
@@ -148,6 +150,7 @@ function TeamPageContent() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
+          [SESSION_ID_HEADER]: getStoredSessionId() || "",
         },
         body: JSON.stringify({
           shop_id: currentShopId,
@@ -192,6 +195,7 @@ function TeamPageContent() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
+          [SESSION_ID_HEADER]: getStoredSessionId() || "",
         },
         body: JSON.stringify({
           shop_id: currentShopId,
@@ -329,6 +333,7 @@ function TeamPageContent() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
+          [SESSION_ID_HEADER]: getStoredSessionId() || "",
         },
         body: JSON.stringify({ member_id: member.member_id, new_pin: newValue }),
       });
@@ -360,7 +365,11 @@ function TeamPageContent() {
       } = await supabase.auth.getSession();
       const res = await fetch("/api/team/burst-mode-extension", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+          [SESSION_ID_HEADER]: getStoredSessionId() || "",
+        },
         body: JSON.stringify({ action, shop_id: currentShopId, ...payload }),
       });
       const json = await res.json();

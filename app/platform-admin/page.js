@@ -7,6 +7,7 @@ import { supabase } from "../../lib/supabaseClient";
 import { useAuth } from "../../lib/AuthProvider";
 import { SUBSCRIPTION_TIERS, getTierConfig } from "../../config/subscriptionTiers";
 import IdleSessionGuard from "../../components/IdleSessionGuard";
+import { SESSION_ID_HEADER, getStoredSessionId } from "../../lib/sessionTracking";
 
 const STATUS_OPTIONS = ["trialing", "active", "past_due", "suspended", "canceled"];
 const PLAN_OPTIONS = Object.keys(SUBSCRIPTION_TIERS);
@@ -37,6 +38,7 @@ async function authedFetchFull(path, options = {}) {
     headers: {
       ...(options.headers || {}),
       Authorization: `Bearer ${session?.access_token}`,
+      [SESSION_ID_HEADER]: getStoredSessionId() || "",
       ...(options.body ? { "Content-Type": "application/json" } : {}),
     },
   });

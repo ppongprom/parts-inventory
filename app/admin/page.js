@@ -6,6 +6,7 @@ import RequireAuth from "../../components/RequireAuth";
 import { useTheme } from "../../lib/ThemeProvider";
 import { useAuth } from "../../lib/AuthProvider";
 import { supabase } from "../../lib/supabaseClient";
+import { SESSION_ID_HEADER, getStoredSessionId } from "../../lib/sessionTracking";
 
 function ChangePinCard() {
   const { currentShop } = useAuth();
@@ -34,6 +35,7 @@ function ChangePinCard() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token}`,
+          [SESSION_ID_HEADER]: getStoredSessionId() || "",
         },
         body: JSON.stringify({
           member_id: currentShop.member_id,
@@ -223,7 +225,10 @@ function ExportCsvCard() {
       } = await supabase.auth.getSession();
 
       const res = await fetch(`${target.endpoint}?shop_id=${currentShopId}`, {
-        headers: { Authorization: `Bearer ${session?.access_token}` },
+        headers: {
+          Authorization: `Bearer ${session?.access_token}`,
+          [SESSION_ID_HEADER]: getStoredSessionId() || "",
+        },
       });
 
       if (!res.ok) {
