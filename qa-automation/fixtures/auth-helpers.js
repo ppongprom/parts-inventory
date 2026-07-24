@@ -68,10 +68,11 @@ export async function expectRedirectedToSignup(page) {
 
 export async function signOut(page) {
   // ปรับ selector ตรงนี้ถ้า AppShell ใช้ label อื่นสำหรับปุ่ม sign out
-  const signOutBtn = page.getByRole("button", { name: /ออกจากระบบ|sign ?out/i });
-  if (await signOutBtn.isVisible().catch(() => false)) {
-    await signOutBtn.click();
-  }
+  // (เดิม guard ด้วย isVisible().catch(() => false) ก่อน click — isVisible() เป็น point-in-time
+  // check ไม่รอ element โผล่เหมือน click() ที่ auto-wait ในตัว ถ้าเรียกเร็วไปตอนหน้ายังไม่ hydrate
+  // เสร็จ ปุ่มยังไม่ทันโผล่ isVisible() จะคืน false ทันทีแล้วข้าม click ไปเงียบๆ — เรียก click()
+  // ตรงๆ ให้ Playwright auto-wait ให้ปุ่ม actionable เองแทน)
+  await page.getByRole("button", { name: /ออกจากระบบ|sign ?out/i }).click();
 }
 
 // ------------------------------------------------------------
