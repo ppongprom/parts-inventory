@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "../lib/AuthProvider";
 import { supabase } from "../lib/supabaseClient";
@@ -13,17 +13,21 @@ export default function RequireAuth({ children, allowedRoles }) {
   const pathname = usePathname();
   const { loading, session, memberships, currentRole, signOut, isDisabledAccount, isExpiredAccount } = useAuth();
 
+  // ⚠️ ตัวนี้คือจุดเดียวที่สั่ง router.replace("/login...") เวลา session ว่างลง — ห้ามให้ตัวอื่น
+  // (เช่น onTimeout ของ IdleSessionGuard ด้านล่าง) สั่ง router.replace ไป /login คู่ขนานเอง เพราะทั้ง
+  // สอง call เป็น async navigation (ต้อง fetch route segment ของ /login ก่อนถึงจะ commit URL จริง)
+  // ลำดับใครเสร็จก่อนไม่แน่นอน ถ้าแยกกันสั่งจะมีโอกาสที่ตัวไม่มี query string ชนะทับ "/login?reason=..."
+  // (เจอกับ TC-301 — idle timeout ควร redirect ไป /login?reason=idle แต่บางรอบไปจบที่ /login เฉยๆ)
+  // แก้โดยรวมเป็น redirect เดียวตรงนี้ ให้ onTimeout แค่ "จองเหตุผล" ไว้ใน ref ก่อนเรียก signOut()
+  const pendingLoginReasonRef = useRef(null);
+
   useEffect(() => {
     if (loading) return;
     if (!session) {
-      // ⚠️ ห้าม replace("/login") ทับถ้าอยู่หน้า /login อยู่แล้ว — caller ที่สั่ง signOut() เอง
-      // (เช่น IdleSessionGuard's onTimeout ใน RequireAuth เองด้านล่าง หรือ AppShell's sign-out
-      // button) อาจกำลัง replace ไป "/login?reason=..." พร้อมกันอยู่ effect นี้ก็ re-run ตาม session
-      // ที่เพิ่งว่างลง (คนละรอบ render กัน ลำดับไม่แน่นอน) ถ้า replace("/login") เฉยๆ ทับซ้อนเข้าไป
-      // อาจชนะแล้วเหลือ query string หาย ผู้ใช้เลยไม่เห็นเหตุผลที่ถูก logout (เจอกับ TC-301 —
-      // idle timeout ควร redirect ไป /login?reason=idle แต่บางรอบไปจบที่ /login เฉยๆ)
       if (pathname !== "/login") {
-        router.replace("/login");
+        const reason = pendingLoginReasonRef.current;
+        pendingLoginReasonRef.current = null;
+        router.replace(reason ? `/login?reason=${reason}` : "/login");
       }
       return;
     }
@@ -136,8 +140,8 @@ export default function RequireAuth({ children, allowedRoles }) {
   return (
     <IdleSessionGuard
       onTimeout={async () => {
+        pendingLoginReasonRef.current = "idle";
         await signOut();
-        router.replace("/login?reason=idle");
       }}
     >
       <AppShell>
