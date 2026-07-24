@@ -8,3 +8,6 @@ test-results/
 qa-automation.backup-*/
 *.bundle
 *.patch
+*.zip
+.env
+.env*.local

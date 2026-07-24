@@ -1,0 +1,39 @@
+title = "gitleaks config for parts-inventory"
+
+# Start from gitleaks' built-in ruleset (covers generic API keys, AWS, legacy
+# Supabase JWT-format anon/service_role keys, etc.) and layer project-specific
+# rules on top of it.
+[extend]
+useDefault = true
+
+# Supabase rotated to a new key-prefix format (sb_publishable_... / sb_secret_...)
+# that gitleaks' default ruleset does not yet recognize (default rules only match
+# the older JWT-shaped service_role/anon keys). This project's
+# SUPABASE_SERVICE_ROLE_KEY has already leaked twice in this format's predecessor
+# (via a committed .zip and via committed qa-automation/test-results/ output),
+# so we add an explicit rule for the current format.
+[[rules]]
+id = "supabase-secret-key"
+description = "Supabase secret API key (sb_secret_ service_role, bypasses RLS)"
+regex = '''sb_secret_[A-Za-z0-9_-]{10,}'''
+tags = ["key", "supabase", "secret"]
+
+# Publishable keys are meant to be public (used client-side), but we still flag
+# them at low confidence in case one gets mistaken for the secret key when
+# pasted around - easy to allowlist per-finding if this proves too noisy.
+[[rules]]
+id = "supabase-publishable-key"
+description = "Supabase publishable API key (client-safe, informational)"
+regex = '''sb_publishable_[A-Za-z0-9_-]{10,}'''
+tags = ["key", "supabase", "publishable"]
+
+[allowlist]
+description = "Ignore placeholder/example values"
+paths = [
+  '''.env.local.example''',
+  '''qa-automation/.env.example''',
+]
+regexes = [
+  '''sb_secret_x+''',
+  '''sb_publishable_x+''',
+]
