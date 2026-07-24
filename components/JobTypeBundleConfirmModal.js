@@ -121,6 +121,40 @@ export default function JobTypeBundleConfirmModal({ initialJobTypeName, shopId, 
     clearPartSearch(`variant-${itemIndex}-${variantIndex}`);
   }
 
+  // Notion 3a6f39f4564981ed9addfd3ed14577b3 — resolved decision (24 ก.ค. 2569): แทนที่จะบังคับ
+  // ค้นหาจากสต็อกใหม่ทุกครั้งที่กด "+ เพิ่ม sub-variant", เสนออะไหล่ที่ "ผูกไว้แล้ว" กับรายการอื่น
+  // ในเซตเดียวกันนี้ (ไม่ใช่ fuzzy-match ชื่อ, ไม่ใช่ field ใหม่, ไม่ใช่ค้นหาข้ามเซตอื่น) —
+  // ข้อมูลทั้งหมดอยู่ใน items state (in-memory) อยู่แล้ว เพราะทั้งเซตแก้ในหน้าเดียวกันหมด
+  // ไม่ต้อง query เพิ่ม สแกน part_id ที่เคยผูกไว้แล้วทั้งระดับรายการ (ไม่มี sub-variant) และ
+  // ระดับ sub-variant ของทุกรายการ (รวมรายการปัจจุบันเอง) แล้วตัดพวกที่ผูกอยู่ใน sub-variant ของ
+  // รายการนี้เองไปแล้วออก (กันเสนอซ้ำอะไหล่ตัวเดียวกันภายในรายการเดียวกัน)
+  function getReuseSuggestions(itemIndex) {
+    const seen = new Set();
+    const suggestions = [];
+    items.forEach((it) => {
+      if (it.part_id && !seen.has(it.part_id)) {
+        seen.add(it.part_id);
+        suggestions.push({
+          id: it.part_id,
+          part_name: it.description || it.item_group_label,
+          price: it.default_amount !== "" && it.default_amount != null ? Number(it.default_amount) : null,
+        });
+      }
+      (it.variants || []).forEach((v) => {
+        if (v.part_id && !seen.has(v.part_id)) {
+          seen.add(v.part_id);
+          suggestions.push({
+            id: v.part_id,
+            part_name: v.description || v.variant_label,
+            price: v.default_amount !== "" && v.default_amount != null ? Number(v.default_amount) : null,
+          });
+        }
+      });
+    });
+    const usedInThisItem = new Set((items[itemIndex]?.variants || []).map((v) => v.part_id).filter(Boolean));
+    return suggestions.filter((s) => !usedInThisItem.has(s.id)).slice(0, 5);
+  }
+
   const canSave = jobTypeName.trim() && items.length > 0 && items.every((it) => it.item_group_label.trim() && it.description.trim());
 
   return (
@@ -343,6 +377,42 @@ export default function JobTypeBundleConfirmModal({ initialJobTypeName, shopId, 
                       ✕
                     </button>
                   </div>
+
+                  {/* Notion 3a6f39f4564981ed9addfd3ed14577b3 — reuse-from-context suggestion:
+                      แสดงเฉพาะตอนที่ sub-variant นี้ยังไม่ได้ผูกกับสต็อกตัวไหนเลย และมีอะไหล่ที่
+                      เคยผูกไว้แล้วในรายการอื่นของเซตนี้ให้เลือก ไม่งั้นไม่แสดงอะไรเพิ่ม — ช่องค้นหา
+                      manual ด้านล่างยังคงเป็น fallback เสมอ */}
+                  {!variant.part_id &&
+                    getReuseSuggestions(itemIndex).length > 0 &&
+                    (() => {
+                      const suggestions = getReuseSuggestions(itemIndex);
+                      return (
+                        <div style={{ marginTop: 4 }}>
+                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>ใช้อันเดียวกับที่เคยผูกไว้แล้ว:</div>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 2 }}>
+                            {suggestions.map((p) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => selectPartForVariant(itemIndex, variantIndex, p)}
+                                style={{
+                                  fontSize: 12,
+                                  padding: "4px 8px",
+                                  borderRadius: 12,
+                                  border: "1px solid var(--border-strong)",
+                                  background: "transparent",
+                                  color: "var(--text)",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                ↺ {p.part_name}
+                                {p.price != null ? ` · ${Number(p.price).toLocaleString()} บาท` : ""}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                   {/* ค้นหาอะไหล่จากสต็อกมาผูกกับ sub-variant นี้ (ไม่บังคับ) */}
                   <div style={{ position: "relative", marginTop: 4 }}>
