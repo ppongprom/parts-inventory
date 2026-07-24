@@ -25,6 +25,7 @@ export async function POST(request) {
     const pin = (body.pin || "").trim();
     const contactName = (body.contact_name || "").trim();
     const contactPhone = (body.contact_phone || "").trim();
+    const requestedBranchId = body.branch_id ?? null;
     // การ์ด "Field Scanner Role + temp account auto-expiry" — เฉพาะ role นี้เท่านั้นที่ตั้ง
     // วันหมดอายุได้ตอนสร้าง (บัญชีปกติอื่นๆ ไม่มีวันหมดอายุ)
     const expiresAt = role === "field_scanner" && body.expires_at ? body.expires_at : null;
@@ -142,7 +143,21 @@ export async function POST(request) {
       );
     }
 
-    // 5) สร้าง shop_members ผูกอู่ทันที (ไม่ต้องมีขั้นตอน invite/accept)
+    // 5) การ์ด "Multi-branch support" — shop_members.branch_id เป็น NOT NULL แล้ว ต้อง resolve
+    // ก่อน insert เสมอ ถ้าไม่ได้ระบุมา (ร้านสาขาเดียว 99%+ ของร้านตอนนี้) fallback ไปสาขา default
+    let resolvedBranchId = requestedBranchId;
+    if (resolvedBranchId == null) {
+      const { data: defaultBranch, error: branchLookupError } = await supabaseAdmin
+        .from("branches")
+        .select("branch_id")
+        .eq("shop_id", shopId)
+        .eq("is_default", true)
+        .maybeSingle();
+      if (branchLookupError) throw branchLookupError;
+      resolvedBranchId = defaultBranch?.branch_id ?? null;
+    }
+
+    // 6) สร้าง shop_members ผูกอู่ทันที (ไม่ต้องมีขั้นตอน invite/accept)
     const { data: member, error: memberError } = await supabaseAdmin
       .from("shop_members")
       .insert({
@@ -156,6 +171,7 @@ export async function POST(request) {
         login_username: username,
         expires_at: expiresAt,
         burst_cycle_type: burstCycleType,
+        branch_id: resolvedBranchId,
       })
       .select()
       .single();

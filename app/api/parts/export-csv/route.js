@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../lib/supabaseAdminClient";
-import { verifyCaller } from "../../../../lib/teamAuth";
+import { verifyCaller, getCallerShopRole } from "../../../../lib/teamAuth";
 import { toCsv } from "../../../../lib/csvExport";
 import { formatBreadcrumb } from "../../../../lib/zoneHelpers";
 import { getTierConfig } from "../../../../config/subscriptionTiers";
@@ -55,17 +55,14 @@ export async function GET(request) {
       return NextResponse.json({ error: "ไม่พบ shop_id" }, { status: 400 });
     }
 
-    const { data: callerMember } = await supabaseAdmin
-      .from("shop_members")
-      .select("role")
-      .eq("shop_id", shopId)
-      .eq("user_id", authResult.userId)
-      .eq("status", "active")
-      .maybeSingle();
-
-    if (!callerMember) {
+    // การ์ด "Multi-branch support" — .maybeSingle() เดิม throw ถ้า user นี้มีหลายแถวใน
+    // shop_members ของ shop เดียวกัน (role ต่างกันคนละสาขา) เปลี่ยนมาใช้ getCallerShopRole()
+    // ที่รวม role สูงสุดข้ามทุกสาขาแทน (ร้านสาขาเดียวพฤติกรรมเหมือนเดิมทุกประการ)
+    const callerRole = await getCallerShopRole(shopId, authResult.userId);
+    if (!callerRole) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์เข้าถึงอู่นี้" }, { status: 403 });
     }
+    const callerMember = { role: callerRole };
 
     const { data: overrides } = await supabaseAdmin
       .from("shop_field_visibility_overrides")

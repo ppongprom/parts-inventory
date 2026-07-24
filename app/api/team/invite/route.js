@@ -18,6 +18,7 @@ export async function POST(request) {
     const shopId = body.shop_id;
     const email = (body.email || "").trim().toLowerCase();
     const role = body.role;
+    const requestedBranchId = body.branch_id ?? null;
 
     // ตรวจสิทธิ์ก่อน validation อื่นๆ ทั้งหมด (bug fix: เดิมเช็ค field completeness ก่อน
     // ทำให้ caller ที่ไม่มีสิทธิ์เห็น 400 "ข้อมูลไม่ครบ" แทนที่จะเจอ 403 ทันที)
@@ -44,11 +45,26 @@ export async function POST(request) {
     }
     const { shop } = seatCheck;
 
+    // การ์ด "Multi-branch support" — คำเชิญตอนนี้ผูกกับสาขาได้ (role ต่อสาขา) ถ้าไม่ได้ระบุ
+    // branch_id มา (ร้านสาขาเดียว 99%+ ของร้านตอนนี้) fallback ไปสาขา default ของร้านอัตโนมัติ —
+    // transparent default เหมือน call site อื่นๆ ทั้งหมดในฟีเจอร์นี้
+    let resolvedBranchId = requestedBranchId;
+    if (resolvedBranchId == null) {
+      const { data: defaultBranch, error: branchLookupError } = await supabaseAdmin
+        .from("branches")
+        .select("branch_id")
+        .eq("shop_id", shopId)
+        .eq("is_default", true)
+        .maybeSingle();
+      if (branchLookupError) throw branchLookupError;
+      resolvedBranchId = defaultBranch?.branch_id ?? null;
+    }
+
     // บันทึกคำเชิญลง shop_invites (upsert เหมือน RPC create_shop_invite เดิม)
     const { data: invite, error: inviteError } = await supabaseAdmin
       .from("shop_invites")
       .upsert(
-        { shop_id: shopId, email, role, invited_by: userId, accepted_at: null },
+        { shop_id: shopId, email, role, invited_by: userId, accepted_at: null, branch_id: resolvedBranchId },
         { onConflict: "shop_id,email" }
       )
       .select()

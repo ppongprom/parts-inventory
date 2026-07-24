@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "../../../../lib/supabaseAdminClient";
-import { verifyCaller } from "../../../../lib/teamAuth";
+import { verifyCaller, getCallerShopRole } from "../../../../lib/teamAuth";
 import { requirePlatformRole, logPlatformAction } from "../../../../lib/platformAdmin";
 
 // Card: "Onboarding Burst Mode — Requester/Approver workflow"
@@ -26,13 +26,11 @@ export async function POST(request) {
     const body = await request.json();
     const { action, shop_id: shopId, member_id: memberId, request_id: requestId, decision } = body;
 
-    const { data: callerMembership } = await supabaseAdmin
-      .from("shop_members")
-      .select("role")
-      .eq("shop_id", shopId)
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .maybeSingle();
+    // การ์ด "Multi-branch support" — .maybeSingle() เดิม throw ถ้า user นี้มีหลายแถวใน
+    // shop_members ของ shop เดียวกัน (คนละสาขา) — เปลี่ยนมาใช้ getCallerShopRole() (role สูงสุด
+    // ข้ามทุกสาขา) แทน ร้านสาขาเดียวพฤติกรรมเหมือนเดิมทุกประการ
+    const callerRole = await getCallerShopRole(shopId, userId);
+    const callerMembership = callerRole ? { role: callerRole } : null;
 
     if (action === "request" && !callerMembership) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์จัดการอู่นี้" }, { status: 403 });

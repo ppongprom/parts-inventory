@@ -22,6 +22,14 @@
  *                 maxConcurrentSessions ของ Enterprise ในไฟล์นี้ — ไม่มี UI ตั้งค่าต่อร้านแยกต่างหาก
  *                 ตอนนี้ ถ้าต้องการค่าที่ตั้งได้จริงต้องเพิ่มคอลัมน์ shops.burst_mode_max_accounts
  *                 override ในอนาคต — เพิ่มเมื่อมีลูกค้า Enterprise จริงที่ต้องการปรับ)
+ * maxBranches = การ์ด "Multi-branch support (Pro=2 สาขา, Enterprise=ไม่จำกัด)" — จำนวนสาขาสูงสุด
+ *                 ต่อร้าน (นับเฉพาะสาขา active) ✅ ตัดสินใจแล้วในการ์ด: Starter/Founder = 1 (สร้าง
+ *                 สาขาเพิ่มไม่ได้เลย), Pro = 2, Enterprise = null (ไม่จำกัด). Trial ไม่ได้ระบุตรงๆ
+ *                 ในการ์ด — judgment call: ให้เท่า Starter/Founder (1 สาขา)
+ *                 ⚠️ ตัวเลขชุดนี้ซ้ำอยู่ใน db/multi_branch_support_migration.sql
+ *                 (fn_tier_max_branches) ด้วย เพราะ trigger ฝั่ง DB (trg_branches_tier_limit)
+ *                 ต้องรู้ limit ทันทีตอน insert branches โดยไม่พึ่งแอปเรียก RPC แยก — แก้ที่นี่แล้ว
+ *                 ต้องไปแก้ SQL function ให้ตรงกันด้วย (เหมือน pattern stockValueCap ด้านบน)
  */
 
 export const GLOBAL_SESSION_CONFIG = {
@@ -45,6 +53,7 @@ export const SUBSCRIPTION_TIERS = {
     maxParts: 50,
     burstModeMaxAccounts: 20,
     trialDays: 14,
+    maxBranches: 1,
     features: ["core_crud", "search", "mobile_camera"],
   },
   starter: {
@@ -56,6 +65,7 @@ export const SUBSCRIPTION_TIERS = {
     stockValueCap: 1000000,
     maxParts: null, // ไม่จำกัด
     burstModeMaxAccounts: 20,
+    maxBranches: 1,
     features: ["core_crud", "search", "mobile_camera", "admin_basic"],
   },
   founder: {
@@ -67,6 +77,7 @@ export const SUBSCRIPTION_TIERS = {
     stockValueCap: 3000000,
     maxParts: null,
     burstModeMaxAccounts: 20,
+    maxBranches: 1,
     features: [
       "core_crud",
       "search",
@@ -86,6 +97,7 @@ export const SUBSCRIPTION_TIERS = {
     stockValueCap: 10000000,
     maxParts: null,
     burstModeMaxAccounts: 20,
+    maxBranches: 2,
     features: [
       "core_crud",
       "search",
@@ -112,6 +124,7 @@ export const SUBSCRIPTION_TIERS = {
     stockValueCap: null,
     maxParts: null,
     burstModeMaxAccounts: null, // configurable/เจรจาต่อรายอู่ (ดูหมายเหตุด้านบน)
+    maxBranches: null, // ไม่จำกัด
     features: ["all", "multi_branch", "api_access", "custom_reports"],
   },
 };

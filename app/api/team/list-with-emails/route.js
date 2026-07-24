@@ -16,15 +16,18 @@ export async function POST(request) {
     // ตรวจสิทธิ์ก่อน validation อื่นๆ (bug fix: เดิมเช็ค field completeness ก่อน ทำให้ caller
     // ที่ไม่มีสิทธิ์เห็น 400 "ข้อมูลไม่ครบ" แทนที่จะเจอ 403 ทันที): ต้องเป็นสมาชิก active ของอู่นี้
     // เท่านั้น (ทุกบทบาทดูรายชื่อได้ แค่แก้ไม่ได้)
-    const { data: callerMembership } = await supabaseAdmin
+    // การ์ด "Multi-branch support" — user อาจมีหลายแถวใน shop_members ของ shop เดียวกันได้แล้ว
+    // (คนละสาขา) แค่ต้องการเช็ค "เป็นสมาชิก active อยู่บ้างไหม" ไม่ได้ต้องการ role เฉพาะ ใช้
+    // .limit(1) แทน .maybeSingle() (ซึ่งจะ throw ถ้าเจอมากกว่า 1 แถว)
+    const { data: callerMembershipRows } = await supabaseAdmin
       .from("shop_members")
       .select("member_id")
       .eq("shop_id", shopId)
       .eq("user_id", userId)
       .eq("status", "active")
-      .maybeSingle();
+      .limit(1);
 
-    if (!callerMembership) {
+    if (!callerMembershipRows || callerMembershipRows.length === 0) {
       return NextResponse.json({ error: "ไม่มีสิทธิ์ดูรายชื่อทีมของอู่นี้" }, { status: 403 });
     }
 
